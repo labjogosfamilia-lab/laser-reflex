@@ -13,12 +13,13 @@
 // 3. Adicione um App Web (</>) e ative o Firestore Database (em Modo de Teste)
 // 4. Cole as credenciais abaixo:
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyAtCIfPr_vuyJnHAQYNLZzpEr_yTuH8VJs",
+  authDomain: "lazer-reflex.firebaseapp.com",
+  projectId: "lazer-reflex",
+  storageBucket: "lazer-reflex.firebasestorage.app",
+  messagingSenderId: "766268517114",
+  appId: "1:766268517114:web:cbdae60ef9016d63697743",
+  measurementId: "G-Q4DCQM8H5P"
 };
 
 class DatabaseManager {
