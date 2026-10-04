@@ -1746,15 +1746,19 @@ class Game {
     if (this.domLobbyModal) {
       if (this.domLobbyCodeText) this.domLobbyCodeText.textContent = 'GERANDO...';
       if (this.domLobbyLinkInput) this.domLobbyLinkInput.value = '';
-      if (this.domLobbyStatusText) this.domLobbyStatusText.textContent = '📡 Criando sala e gerando link...';
+      if (this.domLobbyStatusText) this.domLobbyStatusText.textContent = '📡 Conectando ao servidor global de salas...';
       this.domLobbyModal.classList.remove('hidden');
     }
 
-    this.network.createRoom((code, link) => {
-      if (this.domLobbyCodeText) this.domLobbyCodeText.textContent = code;
-      if (this.domLobbyLinkInput) this.domLobbyLinkInput.value = link;
-      if (this.domLobbyStatusText) this.domLobbyStatusText.textContent = '📡 Aguardando oponente se conectar...';
-    });
+    this.network.createRoom(
+      (code, link) => {
+        if (this.domLobbyCodeText) this.domLobbyCodeText.textContent = code;
+        if (this.domLobbyLinkInput) this.domLobbyLinkInput.value = link;
+      },
+      (statusMsg) => {
+        if (this.domLobbyStatusText) this.domLobbyStatusText.textContent = statusMsg;
+      }
+    );
   }
 
   showJoinModal(prefilledCode = '') {
@@ -1781,9 +1785,10 @@ class Game {
 
     this.network.joinRoom(
       code,
-      (c) => {
+      (statusMsg) => {
         if (this.domJoinStatusMessage) {
-          this.domJoinStatusMessage.textContent = '📡 Procurando host ' + c + '...';
+          this.domJoinStatusMessage.textContent = statusMsg;
+          this.domJoinStatusMessage.style.color = '#00f0ff';
         }
       },
       (err) => {
