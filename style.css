@@ -1207,3 +1207,41 @@ canvas {
   box-shadow: 0 0 40px rgba(255, 230, 0, 0.25);
 }
 
+.x1-rules-banner {
+  background: rgba(255, 230, 0, 0.08);
+  border: 1px solid rgba(255, 230, 0, 0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffe600;
+  line-height: 1.4;
+  text-align: left;
+}
+
+@media (max-width: 768px) {
+  #hud {
+    flex-wrap: wrap;
+    gap: 8px;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+  }
+
+  .hud-mode-group {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .hud-box {
+    padding: 6px 10px;
+  }
+
+  .shoot-bar-container {
+    width: 90px;
+  }
+}
+
+

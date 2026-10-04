@@ -1357,9 +1357,9 @@ class Game {
   setupEventListeners() {
     window.addEventListener('resize', () => this.initCanvasSize());
 
-    // Disparo por clique do Mouse direcionado ao cursor
+    // Disparo por clique do Mouse direcionado ao cursor (EXCLUSIVO MODO MULTIPLAYER X1)
     this.canvas.addEventListener('mousedown', (e) => {
-      if (this.gameState === STATE.PLAYING) {
+      if (this.isMultiplayer && this.gameState === STATE.PLAYING) {
         sounds.init();
         const pos = this.getVirtualMousePos(e);
         this.triggerPlayerShoot(pos.x, pos.y);
@@ -1377,8 +1377,8 @@ class Game {
         }
       }
       if (e.code === 'KeyE' || e.code === 'KeyJ' || e.code === 'Enter') {
-        e.preventDefault();
-        if (this.gameState === STATE.PLAYING) {
+        if (this.isMultiplayer && this.gameState === STATE.PLAYING) {
+          e.preventDefault();
           sounds.init();
           this.triggerPlayerShoot();
         }
@@ -1609,17 +1609,18 @@ class Game {
       });
     }
 
-    // Mobile Tiro a Laser (Recarga de 5s)
+    // Mobile Tiro a Laser (Recarga de 5s - Exclusivo Duelo X1)
     const shootBtn = document.getElementById('mobile-shoot-btn');
     if (shootBtn) {
       const handleShoot = (e) => {
         e.preventDefault();
-        sounds.init();
-        if (this.gameState === STATE.PLAYING) {
+        e.stopPropagation();
+        if (this.isMultiplayer && this.gameState === STATE.PLAYING) {
+          sounds.init();
           this.triggerPlayerShoot();
         }
       };
-      shootBtn.addEventListener('touchstart', handleShoot);
+      shootBtn.addEventListener('touchstart', handleShoot, { passive: false });
       shootBtn.addEventListener('click', handleShoot);
     }
 

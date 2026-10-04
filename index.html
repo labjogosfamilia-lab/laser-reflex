@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Laser Reflex - Sobrevivência Neon</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -61,20 +61,20 @@
             <span class="heart active">♥</span>
           </div>
         </div>
-      </div>
 
-      <div class="hud-actions-group">
         <!-- Barra de Tiro a Laser (Exclusivo Modo X1) -->
-        <div id="hud-shoot-box" class="hud-box hud-shoot-box hidden">
+        <div id="hud-shoot-box" class="hud-box hud-shoot-box">
           <div class="hud-box-header">
-            <span class="hud-label">TIRO X1 [E / CLIQUE]</span>
+            <span class="hud-label">TIRO [E / CLIQUE]</span>
             <span id="shoot-timer-text" class="shoot-status-text ready">⚡ PRONTO</span>
           </div>
           <div class="shoot-bar-container">
             <div id="shoot-bar" class="ready"></div>
           </div>
         </div>
+      </div>
 
+      <div class="hud-actions-group">
         <!-- Barra de Dash -->
         <div class="hud-box hud-dash-box">
           <span class="hud-label">DASH [ESPAÇO]</span>
@@ -107,10 +107,6 @@
           <div class="instruction-row">
             <span class="key-badge">ESPAÇO</span>
             <span class="key-desc">Dash Evasivo (Fica Invulnerável)</span>
-          </div>
-          <div class="instruction-row">
-            <span class="key-badge">E</span> / <span class="key-badge">J</span> / <span class="key-badge">CLIQUE</span>
-            <span class="key-desc">Tiro a Laser (Exclusivo Modo X1 — Recarga 5s — Tira 1 Vida do Rival!)</span>
           </div>
           <div class="instruction-row">
             <span class="icon-desc">⚠️</span>
@@ -257,7 +253,7 @@
             <span class="mode-icon">👑</span>
             <div class="mode-info">
               <strong class="mode-title">CRIAR SALA (DUELO X1)</strong>
-              <span class="mode-desc">Crie uma sala e gere o link para convidar um amigo na mesma rede local ou internet!</span>
+              <span class="mode-desc">Duelo multiplayer! Atire com E / Clique (recarga 5s) para arrancar 1 vida do rival!</span>
             </div>
           </button>
 
@@ -301,6 +297,10 @@
             <button id="btn-copy-link" class="glow-btn copy-btn">📋 COPIAR LINK</button>
           </div>
           <div id="copy-feedback" class="copy-feedback"></div>
+        </div>
+
+        <div class="x1-rules-banner">
+          <span>⚡ <strong>Regra do Duelo:</strong> Mire e use <strong>E / J / Clique</strong> (ou botão ⚡) a cada 5s para atirar. Cada acerto <strong>elimina 1 vida do rival</strong> mesmo se ele tiver escudo!</span>
         </div>
 
         <div class="radar-status-box">
@@ -373,7 +373,7 @@
     </div>
 
   <script src="peerjs.min.js"></script>
-  <script src="network.js"></script>
-  <script src="game.js"></script>
+  <script src="network.js?v=3.0"></script>
+  <script src="game.js?v=3.0"></script>
 </body>
 </html>
