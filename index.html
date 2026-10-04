@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Laser Reflex - Sobrevivência Neon</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- HUD Superior -->
+    <div id="hud">
+      <!-- HUD Modo Solo (Padrão) -->
+      <div id="hud-single" class="hud-mode-group">
+        <div class="hud-box">
+          <span class="hud-label">VIDAS</span>
+          <div id="lives-display">
+            <span class="heart active">♥</span>
+            <span class="heart active">♥</span>
+            <span class="heart active">♥</span>
+          </div>
+        </div>
+
+        <div class="hud-box hud-level">
+          <span class="hud-label">FASE</span>
+          <span id="level-display">1</span>
+        </div>
+
+        <div class="hud-box hud-center">
+          <span class="hud-label">PONTUAÇÃO</span>
+          <span id="score-display">0</span>
+        </div>
+      </div>
+
+      <!-- HUD Modo Duelo X1 (Multiplayer) -->
+      <div id="hud-x1" class="hud-mode-group hidden">
+        <div class="hud-box x1-p1-box">
+          <span class="hud-label" id="x1-p1-name">P1 (VOCÊ)</span>
+          <div id="x1-p1-lives" class="x1-hearts">
+            <span class="heart active">♥</span>
+            <span class="heart active">♥</span>
+            <span class="heart active">♥</span>
+          </div>
+        </div>
+
+        <div class="hud-box x1-center-box">
+          <span class="x1-badge">⚔️ DUELO X1 ⚔️</span>
+          <span id="x1-timer-display" class="x1-timer">00:00</span>
+        </div>
+
+        <div class="hud-box x1-p2-box">
+          <span class="hud-label" id="x1-p2-name">P2 (RIVAL)</span>
+          <div id="x1-p2-lives" class="x1-hearts">
+            <span class="heart active">♥</span>
+            <span class="heart active">♥</span>
+            <span class="heart active">♥</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hud-box hud-right">
+        <span class="hud-label">DASH [ESPAÇO]</span>
+        <div class="dash-bar-container">
+          <div id="dash-bar"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Banner de Mudança de Fase -->
+    <div id="level-up-banner" class="level-banner hidden">
+      <div class="level-banner-content">
+        <div class="level-banner-title" id="banner-title">★ FASE 2 ★</div>
+        <div class="level-banner-sub" id="banner-subtitle">SOBRECARGA ULTRAVIOLETA - LASERS MAIS RÁPIDOS!</div>
+      </div>
+    </div>
+
+    <!-- Tela Inicial / Menu -->
+    <div id="start-screen" class="overlay-screen">
+      <div class="overlay-card">
+        <h1 class="glow-title">LASER REFLEX</h1>
+        <p class="subtitle">SOBREVIVÊNCIA ARCADE NEON</p>
+
+        <div class="instructions">
+          <div class="instruction-row">
+            <span class="key-badge">W A S D</span> ou <span class="key-badge">SETAS</span>
+            <span class="key-desc">Mover o Drone</span>
+          </div>
+          <div class="instruction-row">
+            <span class="key-badge">ESPAÇO</span>
+            <span class="key-desc">Dash Evasivo (Fica Invulnerável)</span>
+          </div>
+          <div class="instruction-row">
+            <span class="icon-desc">⚠️</span>
+            <span class="key-desc">Linhas fracas avisam o laser antes do disparo!</span>
+          </div>
+          <div class="instruction-row">
+            <span class="icon-desc">🔋</span>
+            <span class="key-desc">Colete orbes para pontuar e recarregar o Dash</span>
+          </div>
+          <div class="instruction-row">
+            <span class="icon-desc">💖</span>
+            <span class="key-desc">Vida Extra: colete o coração antes do prazo expirar!</span>
+          </div>
+        </div>
+
+        <div class="menu-buttons-row">
+          <button id="start-btn" class="glow-btn primary-btn">▶ JOGAR</button>
+          <button id="shop-btn" class="glow-btn shop-btn">🛒 LOJA</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tela de Game Over -->
+    <div id="game-over-screen" class="overlay-screen hidden">
+      <div class="overlay-card">
+        <h2 class="game-over-title">SISTEMA CRÍTICO</h2>
+        <p class="game-over-subtitle">O drone foi destruído pelos feixes de laser.</p>
+
+        <div class="stats-box">
+          <div class="stat-item">
+            <span>PONTOS:</span>
+            <strong id="final-score">0</strong>
+          </div>
+          <div class="stat-item">
+            <span>FASE ALCANÇADA:</span>
+            <strong id="final-level">1</strong>
+          </div>
+          <div class="stat-item">
+            <span>TEMPO SOBREVIVIDO:</span>
+            <strong id="final-time">0s</strong>
+          </div>
+          <div class="stat-item highlight">
+            <span>RECORDE (RECORD):</span>
+            <strong id="high-score">0</strong>
+          </div>
+        </div>
+
+        <div class="menu-buttons-row">
+          <button id="restart-btn" class="glow-btn primary-btn">JOGAR NOVAMENTE</button>
+          <button id="gameover-shop-btn" class="glow-btn shop-btn">🛒 LOJA</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tela da Loja -->
+    <div id="shop-screen" class="overlay-screen hidden">
+      <div class="overlay-card shop-card">
+        <div class="shop-header">
+          <div class="shop-header-left">
+            <h2 class="glow-title-small">CYBER LOJA</h2>
+            <p class="shop-subtitle">Personalize seu drone e compre melhorias</p>
+          </div>
+          <div class="currency-badge">
+            <span class="currency-icon">🪙</span>
+            <span id="player-credits">300</span> CRÉDITOS
+          </div>
+        </div>
+
+        <!-- Abas da Loja -->
+        <div class="shop-tabs">
+          <button class="shop-tab active" id="tab-btn-upgrades">⚡ MELHORIAS (Nv. 1-10)</button>
+          <button class="shop-tab" id="tab-btn-skins">🎨 SKINS DO DRONE</button>
+        </div>
+
+        <!-- Seção Upgrades (Aberta por padrão) -->
+        <div id="shop-upgrades-view" class="shop-content-panel">
+          <div class="upgrades-list" id="upgrades-list-container">
+            <!-- Gerado dinamicamente com níveis de 1 a 10 e preços progressivos -->
+          </div>
+        </div>
+
+        <!-- Seção Skins -->
+        <div id="shop-skins-view" class="shop-content-panel hidden">
+          <div class="skins-grid">
+            <div class="shop-item-card" data-skin="cyan">
+              <div class="item-preview" style="background: radial-gradient(circle, #00f0ff 0%, #003344 100%);">
+                <span class="preview-drone" style="color: #00f0ff;">◆</span>
+              </div>
+              <div class="item-name">Ciano Neon</div>
+              <div class="item-desc">Skin Padrão</div>
+              <button class="item-action-btn" data-skin-id="cyan">EQUIPADO</button>
+            </div>
+
+            <div class="shop-item-card" data-skin="gold">
+              <div class="item-preview" style="background: radial-gradient(circle, #ffe600 0%, #443c00 100%);">
+                <span class="preview-drone" style="color: #ffe600;">◆</span>
+              </div>
+              <div class="item-name">Ouro Solar</div>
+              <div class="item-desc">200 Créditos</div>
+              <button class="item-action-btn" data-skin-id="gold" data-price="200">200 🪙</button>
+            </div>
+
+            <div class="shop-item-card" data-skin="crimson">
+              <div class="item-preview" style="background: radial-gradient(circle, #ff0055 0%, #440018 100%);">
+                <span class="preview-drone" style="color: #ff0055;">◆</span>
+              </div>
+              <div class="item-name">Fúria Carmesim</div>
+              <div class="item-desc">250 Créditos</div>
+              <button class="item-action-btn" data-skin-id="crimson" data-price="250">250 🪙</button>
+            </div>
+
+            <div class="shop-item-card" data-skin="emerald">
+              <div class="item-preview" style="background: radial-gradient(circle, #00ffa3 0%, #004428 100%);">
+                <span class="preview-drone" style="color: #00ffa3;">◆</span>
+              </div>
+              <div class="item-name">Matrix Esmeralda</div>
+              <div class="item-desc">300 Créditos</div>
+              <button class="item-action-btn" data-skin-id="emerald" data-price="300">300 🪙</button>
+            </div>
+
+            <div class="shop-item-card" data-skin="purple">
+              <div class="item-preview" style="background: radial-gradient(circle, #b537f2 0%, #35004d 100%);">
+                <span class="preview-drone" style="color: #b537f2;">◆</span>
+              </div>
+              <div class="item-name">Hiperdrive Roxo</div>
+              <div class="item-desc">350 Créditos</div>
+              <button class="item-action-btn" data-skin-id="purple" data-price="350">350 🪙</button>
+            </div>
+          </div>
+        </div>
+
+        <button id="close-shop-btn" class="glow-btn back-btn">← VOLTAR AO MENU</button>
+      </div>
+    </div>
+
+    <!-- Modal Seleção de Modo (Solo ou Multiplayer X1) -->
+    <div id="mode-modal" class="overlay-screen hidden">
+      <div class="overlay-card mode-card">
+        <h2 class="glow-title-small">MODO DE JOGO</h2>
+        <p class="subtitle">ESCOLHA COMO DESEJA JOGAR</p>
+
+        <div class="mode-options-grid">
+          <button id="btn-mode-create" class="mode-card-btn highlight-gold">
+            <span class="mode-icon">👑</span>
+            <div class="mode-info">
+              <strong class="mode-title">CRIAR SALA (DUELO X1)</strong>
+              <span class="mode-desc">Crie uma sala e gere o link para convidar um amigo na mesma rede local ou internet!</span>
+            </div>
+          </button>
+
+          <button id="btn-mode-join" class="mode-card-btn highlight-cyan">
+            <span class="mode-icon">🔗</span>
+            <div class="mode-info">
+              <strong class="mode-title">ENTRAR EM SALA</strong>
+              <span class="mode-desc">Já tem um link ou código de sala do seu oponente? Conecte-se e lute no X1!</span>
+            </div>
+          </button>
+
+          <button id="btn-mode-solo" class="mode-card-btn highlight-purple">
+            <span class="mode-icon">🚀</span>
+            <div class="mode-info">
+              <strong class="mode-title">JOGAR SOLO (CLÁSSICO)</strong>
+              <span class="mode-desc">Partida individual arcade com progressão de fases e recorde.</span>
+            </div>
+          </button>
+        </div>
+
+        <button id="btn-close-mode" class="glow-btn back-btn">← VOLTAR AO MENU</button>
+      </div>
+    </div>
+
+    <!-- Modal Sala Criada (Lobby do Host com Link) -->
+    <div id="lobby-modal" class="overlay-screen hidden">
+      <div class="overlay-card lobby-card">
+        <h2 class="glow-title-small">⚔️ SALA DE DUELO X1</h2>
+        <p class="subtitle">ENVIE O LINK OU CÓDIGO PARA O SEU OPONENTE</p>
+
+        <div class="room-code-section">
+          <span class="room-code-tag">CÓDIGO DA SALA:</span>
+          <div class="room-code-display" id="lobby-code-text">----</div>
+          <button id="btn-copy-code" class="mini-copy-btn">📋 Copiar Código</button>
+        </div>
+
+        <div class="room-link-section">
+          <label class="room-link-label" for="lobby-link-input">LINK PARA O OUTRO JOGADOR ENTRAR:</label>
+          <div class="link-input-group">
+            <input type="text" id="lobby-link-input" readonly value="" />
+            <button id="btn-copy-link" class="glow-btn copy-btn">📋 COPIAR LINK</button>
+          </div>
+          <div id="copy-feedback" class="copy-feedback"></div>
+        </div>
+
+        <div class="radar-status-box">
+          <div class="radar-pulse"></div>
+          <span id="lobby-status-text">📡 Aguardando oponente se conectar...</span>
+        </div>
+
+        <p class="lobby-tip">💡 <strong>Dica de Rede:</strong> O outro jogador pode abrir o link no mesmo Wi-Fi/rede, ou digitar o código em <em>Entrar em Sala</em>!</p>
+
+        <button id="btn-cancel-lobby" class="glow-btn danger-btn">❌ CANCELAR SALA</button>
+      </div>
+    </div>
+
+    <!-- Modal Entrar em Sala (Client) -->
+    <div id="join-modal" class="overlay-screen hidden">
+      <div class="overlay-card join-card">
+        <h2 class="glow-title-small">🔗 ENTRAR EM SALA X1</h2>
+        <p class="subtitle">INSIRA O CÓDIGO DA SALA DO SEU AMIGO</p>
+
+        <div class="join-input-section">
+          <input type="text" id="join-code-input" placeholder="Ex: 8492" maxlength="8" autocomplete="off" />
+          <button id="btn-submit-join" class="glow-btn primary-btn">⚔️ CONECTAR E JOGAR</button>
+        </div>
+
+        <div id="join-status-message" class="join-status-text"></div>
+
+        <button id="btn-close-join" class="glow-btn back-btn">← VOLTAR</button>
+      </div>
+    </div>
+
+    <!-- Modal Fim de Duelo X1 -->
+    <div id="x1-gameover-modal" class="overlay-screen hidden">
+      <div class="overlay-card x1-gameover-card">
+        <h2 id="x1-result-title" class="glow-title">🏆 VITÓRIA NO X1!</h2>
+        <p id="x1-result-subtitle" class="subtitle">Você sobreviveu e destruiu o drone oponente!</p>
+
+        <div class="stats-box">
+          <div class="stat-item">
+            <span>DURAÇÃO DO DUELO:</span>
+            <strong id="x1-stat-time">0s</strong>
+          </div>
+          <div class="stat-item">
+            <span>SUAS VIDAS:</span>
+            <strong id="x1-stat-my-lives">3</strong>
+          </div>
+          <div class="stat-item">
+            <span>VIDAS DO OPONENTE:</span>
+            <strong id="x1-stat-enemy-lives">0</strong>
+          </div>
+        </div>
+
+        <div class="menu-buttons-row">
+          <button id="btn-x1-rematch" class="glow-btn primary-btn">🔄 REVANCHE</button>
+          <button id="btn-x1-leave" class="glow-btn back-btn">🏠 MENU PRINCIPAL</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controles para dispositivos móveis (Touch) -->
+    <div id="mobile-controls">
+      <div id="touch-joystick-zone">
+        <div id="touch-stick-base">
+          <div id="touch-stick-handle"></div>
+        </div>
+      </div>
+      <button id="mobile-dash-btn" class="mobile-action-btn">DASH</button>
+    </div>
+  </div>
+
+  <script src="peerjs.min.js"></script>
+  <script src="network.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
