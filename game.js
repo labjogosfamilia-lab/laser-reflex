@@ -11,7 +11,8 @@ const STATE = {
   MENU: 'MENU',
   PLAYING: 'PLAYING',
   GAMEOVER: 'GAMEOVER',
-  SHOP: 'SHOP'
+  SHOP: 'SHOP',
+  PHASE_SHOP: 'PHASE_SHOP'
 };
 
 // Dicionário de Skins da Loja
@@ -23,30 +24,30 @@ const SKINS = {
   purple: { name: 'Hiperdrive Roxo', color: '#b537f2', price: 350 }
 };
 
-// Dicionário de Melhorias Progressivas (Nível 1 até Nível 10)
+// Dicionário de Melhorias Roguelite da Rodada (Nível 1 a 5 - Resetam ao morrer)
 const UPGRADES_CONFIG = {
   energyMagnet: {
     id: 'energyMagnet',
     name: 'Ímã de Energia',
     icon: '🧲',
-    maxLevel: 10,
-    basePrice: 100,
+    maxLevel: 5,
+    basePrice: 70,
     priceMultiplier: 1.35,
     getDesc: (lvl) => {
       if (lvl === 0) return 'Atrai orbes da arena (Compre o Nível 1 para ativar)';
-      const radius = 60 + lvl * 25;
-      return `Raio magnético: ${radius}px | Velocidade de atração: +${lvl * 18}%`;
+      const radius = 60 + lvl * 32;
+      return `Raio magnético: ${radius}px | Velocidade: +${lvl * 25}%`;
     }
   },
   dashTurbine: {
     id: 'dashTurbine',
     name: 'Turbina de Dash',
     icon: '⚡',
-    maxLevel: 10,
-    basePrice: 120,
+    maxLevel: 5,
+    basePrice: 80,
     priceMultiplier: 1.35,
     getDesc: (lvl) => {
-      const cd = Math.max(0.8, 2.0 - lvl * 0.12);
+      const cd = Math.max(0.70, 2.0 - lvl * 0.26);
       return `Tempo de recarga do Dash reduzido para ${cd.toFixed(2)}s`;
     }
   },
@@ -54,24 +55,24 @@ const UPGRADES_CONFIG = {
     id: 'shieldCore',
     name: 'Núcleo de Escudo',
     icon: '🛡️',
-    maxLevel: 10,
-    basePrice: 130,
-    priceMultiplier: 1.36,
+    maxLevel: 5,
+    basePrice: 90,
+    priceMultiplier: 1.40,
     getDesc: (lvl) => {
-      if (lvl === 0) return 'Comece as partidas com Escudo de Força (Bloqueado)';
-      const invul = (1.6 + lvl * 0.12).toFixed(2);
-      return `Inicia com Escudo + Imunidade pós-dano de ${invul}s`;
+      if (lvl === 0) return 'Restaura Escudo a cada nova fase (Bloqueado)';
+      const invul = (1.6 + lvl * 0.20).toFixed(2);
+      return `Gera Escudo em toda fase + Imunidade pós-dano de ${invul}s`;
     }
   },
   creditBoost: {
     id: 'creditBoost',
     name: 'Hack de Créditos',
     icon: '🪙',
-    maxLevel: 10,
-    basePrice: 110,
-    priceMultiplier: 1.38,
+    maxLevel: 5,
+    basePrice: 60,
+    priceMultiplier: 1.35,
     getDesc: (lvl) => {
-      return `Ganhos de moedas na arena aumentados em +${lvl * 15}%`;
+      return `Ganhos de moedas na arena aumentados em +${lvl * 25}%`;
     }
   }
 };
@@ -1249,38 +1250,32 @@ class Game {
     }
     this.ownedSkins = Array.isArray(savedOwned) ? savedOwned : ['cyan'];
 
-    // Carrega melhorias com suporte a níveis de 0 a 10 e migração de versão anterior
-    let savedUpgrades = {};
-    try {
-      savedUpgrades = JSON.parse(localStorage.getItem('laser_reflex_upgrades')) || {};
-    } catch (e) {
-      savedUpgrades = {};
-    }
-
-    const parseUpgradeLevel = (val) => {
-      if (val === true) return 1;
-      const num = parseInt(val, 10);
-      return isNaN(num) ? 0 : Math.max(0, Math.min(10, num));
-    };
-
+    // Melhorias são 100% da rodada (Roguelite). Iniciam no Nível 0 e resetam ao morrer!
     this.upgrades = {
-      energyMagnet: parseUpgradeLevel(savedUpgrades.energyMagnet),
-      dashTurbine: parseUpgradeLevel(savedUpgrades.dashTurbine),
-      shieldCore: parseUpgradeLevel(savedUpgrades.shieldCore !== undefined ? savedUpgrades.shieldCore : savedUpgrades.startShield),
-      creditBoost: parseUpgradeLevel(savedUpgrades.creditBoost)
+      energyMagnet: 0,
+      dashTurbine: 0,
+      shieldCore: 0,
+      creditBoost: 0
     };
+    this.runCredits = 0;
+    try {
+      localStorage.removeItem('laser_reflex_upgrades');
+    } catch (e) {}
 
     // Aplica a skin salva ao jogador
     this.player.skinColor = SKINS[this.equippedSkin]?.color || '#00f0ff';
 
-    // Elementos DOM da Loja
+    // Elementos DOM da Loja do Menu (Skins)
     this.domShopScreen = document.getElementById('shop-screen');
     this.domPlayerCredits = document.getElementById('player-credits');
-    this.domTabBtnSkins = document.getElementById('tab-btn-skins');
-    this.domTabBtnUpgrades = document.getElementById('tab-btn-upgrades');
     this.domSkinsView = document.getElementById('shop-skins-view');
-    this.domUpgradesView = document.getElementById('shop-upgrades-view');
-    this.domUpgradesContainer = document.getElementById('upgrades-list-container');
+
+    // Elementos DOM da Estação de Melhorias Entre Fases (Upgrades da Partida)
+    this.domRunCreditsDisplay = document.getElementById('run-credits-display');
+    this.domPhaseShopModal = document.getElementById('phase-shop-modal');
+    this.domPhaseShopTitle = document.getElementById('phase-shop-title');
+    this.domPhaseRunCredits = document.getElementById('phase-run-credits');
+    this.domPhaseUpgradesContainer = document.getElementById('phase-upgrades-container');
 
     // Multiplayer (Duelo X1)
     this.isMultiplayer = false;
@@ -1553,25 +1548,6 @@ class Game {
       });
     }
 
-    // Alternar Abas da Loja (Skins vs Upgrades)
-    if (this.domTabBtnSkins && this.domTabBtnUpgrades) {
-      this.domTabBtnSkins.addEventListener('click', () => {
-        sounds.init();
-        this.domTabBtnSkins.classList.add('active');
-        this.domTabBtnUpgrades.classList.remove('active');
-        if (this.domSkinsView) this.domSkinsView.classList.remove('hidden');
-        if (this.domUpgradesView) this.domUpgradesView.classList.add('hidden');
-      });
-
-      this.domTabBtnUpgrades.addEventListener('click', () => {
-        sounds.init();
-        this.domTabBtnUpgrades.classList.add('active');
-        this.domTabBtnSkins.classList.remove('active');
-        if (this.domUpgradesView) this.domUpgradesView.classList.remove('hidden');
-        if (this.domSkinsView) this.domSkinsView.classList.add('hidden');
-      });
-    }
-
     // Ações de Skins na Loja (Comprar e Equipar)
     document.querySelectorAll('.shop-item-card').forEach(card => {
       const btn = card.querySelector('.item-action-btn');
@@ -1584,15 +1560,31 @@ class Game {
       }
     });
 
-    // Ações de Upgrades na Loja (Delegação de Eventos para os cards dinâmicos)
-    if (this.domUpgradesContainer) {
-      this.domUpgradesContainer.addEventListener('click', (e) => {
-        const btn = e.target.closest('.upgrade-action-btn');
-        if (!btn || btn.disabled) return;
-        const upgradeId = btn.getAttribute('data-upgrade-id');
-        if (upgradeId) {
+    // Ações da Estação de Melhorias Entre Fases (Upgrades Roguelite da Partida)
+    const nextPhaseBtn = document.getElementById('btn-next-phase');
+    if (nextPhaseBtn) {
+      nextPhaseBtn.addEventListener('click', () => {
+        sounds.init();
+        this.continueToNextPhase();
+      });
+    }
+
+    if (this.domPhaseUpgradesContainer) {
+      this.domPhaseUpgradesContainer.addEventListener('click', (e) => {
+        const buyBtn = e.target.closest('[data-upgrade-id]');
+        if (buyBtn && !buyBtn.disabled) {
+          const upgradeId = buyBtn.getAttribute('data-upgrade-id');
+          if (upgradeId) {
+            sounds.init();
+            this.buyPhaseUpgrade(upgradeId);
+          }
+          return;
+        }
+
+        const healBtn = e.target.closest('[data-heal-btn]');
+        if (healBtn && !healBtn.disabled && this.player.lives < 3) {
           sounds.init();
-          this.buyUpgrade(upgradeId);
+          this.buyPhaseHeal();
         }
       });
     }
@@ -1908,14 +1900,9 @@ class Game {
       if (this.domX1P2Name) this.domX1P2Name.textContent = 'P2 (VOCÊ) - CARMESIM';
     }
 
-    // Melhores atributos da loja para o jogador local
-    const dashLvl = this.upgrades.dashTurbine || 0;
-    this.player.dashCooldownMax = Math.max(0.8, 2.0 - dashLvl * 0.12);
-    const shieldLvl = this.upgrades.shieldCore || 0;
-    this.player.invulnerableDuration = 1.6 + shieldLvl * 0.12;
-    if (shieldLvl > 0) {
-      this.player.shieldActive = true;
-    }
+    // No Duelo X1, ambos os jogadores competem com status padrão equilibrados
+    this.player.dashCooldownMax = 2.0;
+    this.player.invulnerableDuration = 1.6;
 
     this.updateX1HUD();
   }
@@ -2155,6 +2142,7 @@ class Game {
     if (this.domHudX1) this.domHudX1.classList.add('hidden');
     if (this.domHudSingle) this.domHudSingle.classList.remove('hidden');
     if (this.domStartScreen) this.domStartScreen.classList.remove('hidden');
+    if (this.domPhaseShopModal) this.domPhaseShopModal.classList.add('hidden');
 
     this.player.reset(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
     this.player.nameTag = null;
@@ -2206,27 +2194,31 @@ class Game {
     this.phase5RainTriggered = false;
     this.phase5RainCooldown = 0;
 
-    // Reseta o jogador com a skin equipada e melhorias da loja
+    // SE MORRE RESETA: garante que nova partida começa com 0 upgrades e 0 créditos da rodada
+    this.upgrades = {
+      energyMagnet: 0,
+      dashTurbine: 0,
+      shieldCore: 0,
+      creditBoost: 0
+    };
+    this.runCredits = 0;
+    this.updateRunCreditsDisplay();
+    try {
+      localStorage.removeItem('laser_reflex_upgrades');
+    } catch (e) {}
+
+    // Reseta o jogador com a skin equipada e status base da rodada
     this.player.reset(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
     this.player.nameTag = null;
     this.player.skinColor = SKINS[this.equippedSkin]?.color || '#00f0ff';
-
-    // Turbina de Dash (Nível 0 a 10: 2.0s -> 0.8s)
-    const dashLvl = this.upgrades.dashTurbine || 0;
-    this.player.dashCooldownMax = Math.max(0.8, 2.0 - dashLvl * 0.12);
-
-    // Núcleo de Escudo (Nível 0 a 10: inicia com escudo se lvl >= 1 e amplia imunidade pós-dano)
-    const shieldLvl = this.upgrades.shieldCore || 0;
-    this.player.invulnerableDuration = 1.6 + shieldLvl * 0.12;
-    if (shieldLvl > 0) {
-      this.player.shieldActive = true;
-    }
+    this.applyUpgradesToPlayer();
 
     if (this.domHudSingle) this.domHudSingle.classList.remove('hidden');
     if (this.domHudX1) this.domHudX1.classList.add('hidden');
     if (this.domStartScreen) this.domStartScreen.classList.add('hidden');
     if (this.domGameOverScreen) this.domGameOverScreen.classList.add('hidden');
     if (this.domShopScreen) this.domShopScreen.classList.add('hidden');
+    if (this.domPhaseShopModal) this.domPhaseShopModal.classList.add('hidden');
     if (this.domModeModal) this.domModeModal.classList.add('hidden');
     if (this.domLobbyModal) this.domLobbyModal.classList.add('hidden');
     if (this.domJoinModal) this.domJoinModal.classList.add('hidden');
@@ -2234,7 +2226,31 @@ class Game {
     this.updateHUD();
   }
 
+  applyUpgradesToPlayer() {
+    // Turbina de Dash (2.0s -> 0.70s)
+    const dashLvl = this.upgrades.dashTurbine || 0;
+    this.player.dashCooldownMax = Math.max(0.70, 2.0 - dashLvl * 0.26);
+
+    // Núcleo de Escudo (imunidade ampliada)
+    const shieldLvl = this.upgrades.shieldCore || 0;
+    this.player.invulnerableDuration = 1.6 + shieldLvl * 0.20;
+  }
+
+  updateRunCreditsDisplay() {
+    if (this.domRunCreditsDisplay) {
+      this.domRunCreditsDisplay.textContent = `🪙 ${this.runCredits || 0}`;
+    }
+    if (this.domPhaseRunCredits) {
+      this.domPhaseRunCredits.textContent = this.runCredits || 0;
+    }
+  }
+
   addCredits(amount) {
+    if (!this.isMultiplayer) {
+      this.runCredits = (this.runCredits || 0) + amount;
+      this.updateRunCreditsDisplay();
+    }
+
     this.credits = (this.credits || 0) + amount;
     localStorage.setItem('laser_reflex_credits', this.credits);
     if (this.domPlayerCredits) {
@@ -2247,13 +2263,6 @@ class Game {
     if (this.domStartScreen) this.domStartScreen.classList.add('hidden');
     if (this.domGameOverScreen) this.domGameOverScreen.classList.add('hidden');
     if (this.domShopScreen) this.domShopScreen.classList.remove('hidden');
-
-    // Abre com a aba de Melhorias ativa por padrão
-    if (this.domTabBtnUpgrades) this.domTabBtnUpgrades.classList.add('active');
-    if (this.domTabBtnSkins) this.domTabBtnSkins.classList.remove('active');
-    if (this.domUpgradesView) this.domUpgradesView.classList.remove('hidden');
-    if (this.domSkinsView) this.domSkinsView.classList.add('hidden');
-
     this.renderShopUI();
   }
 
@@ -2268,7 +2277,7 @@ class Game {
       this.domPlayerCredits.textContent = this.credits;
     }
 
-    // Renderiza botões das Skins
+    // Renderiza botões das Skins da loja do menu
     document.querySelectorAll('.shop-item-card').forEach(card => {
       const skinId = card.getAttribute('data-skin');
       const btn = card.querySelector('.item-action-btn');
@@ -2287,65 +2296,16 @@ class Game {
         btn.classList.add('buy-btn');
       }
     });
-
-    // Renderiza os Cards de Melhorias com 10 Níveis Dinâmicos e Preços Crescentes
-    if (this.domUpgradesContainer) {
-      this.domUpgradesContainer.innerHTML = '';
-      Object.values(UPGRADES_CONFIG).forEach(cfg => {
-        const currentLvl = this.upgrades[cfg.id] || 0;
-        const isMax = currentLvl >= cfg.maxLevel;
-        const nextPrice = getUpgradePrice(cfg.id, currentLvl);
-
-        const row = document.createElement('div');
-        row.className = 'upgrade-row';
-        row.setAttribute('data-upgrade', cfg.id);
-
-        // Gera os 10 pips da barra de progresso visual
-        let pipsHtml = '';
-        for (let i = 1; i <= cfg.maxLevel; i++) {
-          const filled = i <= currentLvl ? (isMax ? 'filled max' : 'filled') : '';
-          pipsHtml += `<div class="level-pip ${filled}"></div>`;
-        }
-
-        const badgeClass = isMax ? 'upgrade-level-badge max' : 'upgrade-level-badge';
-        const badgeText = isMax ? 'NÍVEL MÁXIMO' : `Nv. ${currentLvl}/${cfg.maxLevel}`;
-
-        let btnHtml = '';
-        if (isMax) {
-          btnHtml = `<button class="upgrade-action-btn purchased" disabled>MAX ✓</button>`;
-        } else {
-          btnHtml = `<button class="upgrade-action-btn buy-btn" data-upgrade-id="${cfg.id}">+1 NV (${nextPrice} 🪙)</button>`;
-        }
-
-        row.innerHTML = `
-          <div class="upgrade-icon">${cfg.icon}</div>
-          <div class="upgrade-info">
-            <div class="upgrade-title-row">
-              <span class="upgrade-title">${cfg.name}</span>
-              <span class="${badgeClass}">${badgeText}</span>
-            </div>
-            <div class="upgrade-level-track">
-              ${pipsHtml}
-            </div>
-            <div class="upgrade-desc">${cfg.getDesc(currentLvl)}</div>
-          </div>
-          ${btnHtml}
-        `;
-
-        this.domUpgradesContainer.appendChild(row);
-      });
-    }
   }
 
   buyOrEquipSkin(skinId) {
     if (!SKINS[skinId]) return;
 
     if (this.equippedSkin === skinId) {
-      return; // Já está equipado
+      return;
     }
 
     if (this.ownedSkins.includes(skinId)) {
-      // Já possui a skin, equipa
       this.equippedSkin = skinId;
       localStorage.setItem('laser_reflex_skin', skinId);
       this.player.skinColor = SKINS[skinId].color;
@@ -2354,7 +2314,7 @@ class Game {
       return;
     }
 
-    // Comprar
+    // Comprar skin
     const price = SKINS[skinId].price;
     if (this.credits >= price) {
       this.credits -= price;
@@ -2378,80 +2338,65 @@ class Game {
     }
   }
 
-  buyUpgrade(upgradeId) {
-    const cfg = UPGRADES_CONFIG[upgradeId];
-    if (!cfg) return;
+  openPhaseShop() {
+    this.gameState = STATE.PHASE_SHOP;
+    this.keys = {};
+    this.player.vx = 0;
+    this.player.vy = 0;
 
-    const currentLvl = this.upgrades[upgradeId] || 0;
-    if (currentLvl >= cfg.maxLevel) return;
+    // Limpa projéteis e feixes da arena
+    this.lasers = [];
+    this.bullets = [];
+    this.laserSpawnTimer = 0;
+    this.pickupSpawnTimer = 0;
 
-    const price = getUpgradePrice(upgradeId, currentLvl);
-    if (this.credits >= price) {
-      this.credits -= price;
-      this.upgrades[upgradeId] = currentLvl + 1;
-      localStorage.setItem('laser_reflex_credits', this.credits);
-      localStorage.setItem('laser_reflex_upgrades', JSON.stringify(this.upgrades));
-
-      sounds.playBuy();
-      this.renderShopUI();
-    } else {
-      sounds.playError();
-      if (this.domPlayerCredits) {
-        this.domPlayerCredits.parentElement.style.animation = 'pulse-bar 0.3s 2';
-        setTimeout(() => {
-          if (this.domPlayerCredits) this.domPlayerCredits.parentElement.style.animation = '';
-        }, 600);
-      }
-    }
-  }
-
-  advanceLevel() {
-    this.level++;
-    if (this.domLevelDisplay) this.domLevelDisplay.textContent = this.level;
-
-    // Toca fanfarra sonora de nova fase
-    sounds.playLevelUp();
-
-    // Bônus de créditos ao avançar de fase (ampliado com Hack de Créditos)
+    // Bônus de conclusão de fase para os créditos da partida
     const boostLvl = this.upgrades.creditBoost || 0;
-    const creditMult = 1 + boostLvl * 0.15;
+    const creditMult = 1 + boostLvl * 0.25;
     this.addCredits(Math.round(50 * creditMult));
 
-    // Recompensa: Recupera +1 Vida se estiver com menos de 3!
+    // Recupera 1 vida de graça se ferido
     if (this.player.lives < 3) {
       this.player.lives++;
     }
     this.updateHUD();
 
-    // Limpa a arena e concede 2.4s de intervalo seguro
-    this.lasers = [];
-    this.laserSpawnTimer = 0;
-    this.levelTransitionTimer = 2.4;
-    this.screenShake = 12;
+    // Fanfarra sonora
+    sounds.playLevelUp();
 
-    // Chuva de partículas de celebração neon
-    const colors = ['#ffe600', '#00f0ff', '#ff00aa', '#00ffa3', '#ffffff'];
-    for (let i = 0; i < 50; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const spd = 70 + Math.random() * 200;
-      const col = colors[Math.floor(Math.random() * colors.length)];
-      this.particles.push(new Particle(
-        VIRTUAL_WIDTH / 2 + (Math.random() - 0.5) * 160,
-        VIRTUAL_HEIGHT / 2 + (Math.random() - 0.5) * 90,
-        col,
-        Math.cos(ang) * spd,
-        Math.sin(ang) * spd,
-        0.8,
-        4
-      ));
+    if (this.domPhaseShopTitle) {
+      this.domPhaseShopTitle.textContent = `★ FASE ${this.level} CONCLUÍDA! ★`;
+    }
+    this.updateRunCreditsDisplay();
+    this.renderPhaseShopUI();
+
+    if (this.domPhaseShopModal) {
+      this.domPhaseShopModal.classList.remove('hidden');
+    }
+  }
+
+  continueToNextPhase() {
+    if (this.domPhaseShopModal) {
+      this.domPhaseShopModal.classList.add('hidden');
     }
 
-    // Exibe o Banner de Transição de Fase
+    this.level++;
+    if (this.domLevelDisplay) this.domLevelDisplay.textContent = this.level;
+
+    // Se possui Núcleo de Escudo adquirido, concede o escudo para a nova fase
+    const shieldLvl = this.upgrades.shieldCore || 0;
+    if (shieldLvl > 0) {
+      this.player.shieldActive = true;
+    }
+
+    this.applyUpgradesToPlayer();
+    this.updateHUD();
+
+    // Exibe banner da nova fase
     if (this.domLevelBanner && this.domBannerTitle && this.domBannerSub) {
       this.domBannerTitle.textContent = `★ FASE ${this.level} ★`;
-
       if (this.level === 2) {
-        this.domBannerSub.textContent = `SOBRECARGA ULTRAVIOLETA: Lasers Rastreadores (com 0.5s de delay para esquivar)!`;
+        this.domBannerSub.textContent = `SOBRECARGA ULTRAVIOLETA: Lasers Rastreadores (delay para esquivar)!`;
       } else if (this.level === 3) {
         this.domBannerSub.textContent = `HIPERDRIVE QUÂNTICO: Feixes Duplos e Velocidade Extrema!`;
       } else if (this.level === 4) {
@@ -2473,17 +2418,159 @@ class Game {
       this.phase5RainTriggered = false;
       this.phase5RainCooldown = 0.5;
     }
+
+    this.lasers = [];
+    this.laserSpawnTimer = 0;
+    this.levelTransitionTimer = 2.4;
+    this.gameState = STATE.PLAYING;
+  }
+
+  renderPhaseShopUI() {
+    this.updateRunCreditsDisplay();
+    if (!this.domPhaseUpgradesContainer) return;
+    this.domPhaseUpgradesContainer.innerHTML = '';
+
+    Object.values(UPGRADES_CONFIG).forEach(cfg => {
+      const currentLvl = this.upgrades[cfg.id] || 0;
+      const isMax = currentLvl >= cfg.maxLevel;
+      const nextPrice = getUpgradePrice(cfg.id, currentLvl);
+      const canAfford = !isMax && ((this.runCredits || 0) >= nextPrice);
+
+      const card = document.createElement('div');
+      card.className = 'phase-upgrade-card' + (isMax ? ' maxed' : '');
+
+      let pipsHtml = '';
+      for (let i = 1; i <= cfg.maxLevel; i++) {
+        const filled = i <= currentLvl ? (isMax ? 'filled max' : 'filled') : '';
+        pipsHtml += `<div class="phase-level-pip ${filled}"></div>`;
+      }
+
+      const badgeText = isMax ? 'MÁXIMO' : `Nv. ${currentLvl}/${cfg.maxLevel}`;
+
+      let btnHtml = '';
+      if (isMax) {
+        btnHtml = `<button class="phase-buy-btn maxed-btn" disabled>MAX ✓</button>`;
+      } else {
+        btnHtml = `<button class="phase-buy-btn ${canAfford ? 'can-buy' : 'cant-afford'}" data-upgrade-id="${cfg.id}">+1 NV (${nextPrice} 🪙)</button>`;
+      }
+
+      card.innerHTML = `
+        <div class="phase-upgrade-icon">${cfg.icon}</div>
+        <div class="phase-upgrade-info">
+          <div class="phase-upgrade-title-row">
+            <span class="phase-upgrade-title">${cfg.name}</span>
+            <span class="phase-level-badge ${isMax ? 'max' : ''}">${badgeText}</span>
+          </div>
+          <div class="phase-level-track">
+            ${pipsHtml}
+          </div>
+          <div class="phase-upgrade-desc">${cfg.getDesc(currentLvl)}</div>
+        </div>
+        <div class="phase-upgrade-action">
+          ${btnHtml}
+        </div>
+      `;
+
+      this.domPhaseUpgradesContainer.appendChild(card);
+    });
+
+    // Opção extra: Reparo de Drone (+1 Vida se estiver ferido)
+    const healPrice = 80;
+    const needsHeal = this.player.lives < 3;
+    const canAffordHeal = needsHeal && ((this.runCredits || 0) >= healPrice);
+    const healCard = document.createElement('div');
+    healCard.className = 'phase-upgrade-card heal-card';
+    healCard.innerHTML = `
+      <div class="phase-upgrade-icon">💖</div>
+      <div class="phase-upgrade-info">
+        <div class="phase-upgrade-title-row">
+          <span class="phase-upgrade-title">Reparo Nano (+1 Vida)</span>
+          <span class="phase-level-badge ${needsHeal ? '' : 'max'}">${needsHeal ? `${this.player.lives}/3 Vidas` : 'VIDAS CHEIAS'}</span>
+        </div>
+        <div class="phase-upgrade-desc">Restaura 1 coração de vida imediatamente para prosseguir na partida.</div>
+      </div>
+      <div class="phase-upgrade-action">
+        <button class="phase-buy-btn ${needsHeal ? (canAffordHeal ? 'can-buy heal' : 'cant-afford') : 'maxed-btn'}" data-heal-btn="true" ${needsHeal ? '' : 'disabled'}>
+          ${needsHeal ? `+1 ♥ (${healPrice} 🪙)` : 'CHEIO ✓'}
+        </button>
+      </div>
+    `;
+    this.domPhaseUpgradesContainer.appendChild(healCard);
+  }
+
+  buyPhaseUpgrade(upgradeId) {
+    const cfg = UPGRADES_CONFIG[upgradeId];
+    if (!cfg) return;
+
+    const currentLvl = this.upgrades[upgradeId] || 0;
+    if (currentLvl >= cfg.maxLevel) return;
+
+    const price = getUpgradePrice(upgradeId, currentLvl);
+    if ((this.runCredits || 0) >= price) {
+      this.runCredits -= price;
+      this.upgrades[upgradeId] = currentLvl + 1;
+      this.applyUpgradesToPlayer();
+
+      sounds.playBuy();
+      this.updateRunCreditsDisplay();
+      this.renderPhaseShopUI();
+    } else {
+      sounds.playError();
+      if (this.domPhaseRunCredits) {
+        this.domPhaseRunCredits.parentElement.style.animation = 'pulse-bar 0.3s 2';
+        setTimeout(() => {
+          if (this.domPhaseRunCredits) this.domPhaseRunCredits.parentElement.style.animation = '';
+        }, 600);
+      }
+    }
+  }
+
+  buyPhaseHeal() {
+    const healPrice = 80;
+    if (this.player.lives >= 3) return;
+
+    if ((this.runCredits || 0) >= healPrice) {
+      this.runCredits -= healPrice;
+      this.player.lives++;
+      sounds.playBuy();
+      this.updateHUD();
+      this.updateRunCreditsDisplay();
+      this.renderPhaseShopUI();
+    } else {
+      sounds.playError();
+      if (this.domPhaseRunCredits) {
+        this.domPhaseRunCredits.parentElement.style.animation = 'pulse-bar 0.3s 2';
+        setTimeout(() => {
+          if (this.domPhaseRunCredits) this.domPhaseRunCredits.parentElement.style.animation = '';
+        }, 600);
+      }
+    }
   }
 
   triggerGameOver() {
     this.gameState = STATE.GAMEOVER;
     this.screenShake = 20;
 
-    // Bônus de créditos proporcional ao desempenho da partida (ampliado com Hack de Créditos)
-    const boostLvl = this.upgrades.creditBoost || 0;
-    const creditMult = 1 + boostLvl * 0.15;
+    // SE MORRE RESETA: zera completamente os upgrades e créditos da partida!
+    this.upgrades = {
+      energyMagnet: 0,
+      dashTurbine: 0,
+      shieldCore: 0,
+      creditBoost: 0
+    };
+    this.runCredits = 0;
+    this.updateRunCreditsDisplay();
+    try {
+      localStorage.removeItem('laser_reflex_upgrades');
+    } catch (e) {}
+
+    // Bônus permanente de créditos de performance para comprar skins na Cyber Loja
     const matchBonus = Math.max(15, Math.floor(this.score / 80));
-    this.addCredits(Math.round(matchBonus * creditMult));
+    this.credits = (this.credits || 0) + matchBonus;
+    localStorage.setItem('laser_reflex_credits', this.credits);
+    if (this.domPlayerCredits) {
+      this.domPlayerCredits.textContent = this.credits;
+    }
 
     if (this.score > this.highScore) {
       this.highScore = Math.floor(this.score);
@@ -2850,9 +2937,9 @@ class Game {
       this.survivalTime += dt;
       this.score += dt * 15; // Pontos por segundo vivo
 
-      // Checagem de FASE: Passa de fase ao completar múltiplos de 5000 pontos (5000, 10000, 15000...)
+      // Checagem de FASE: Conclui a fase ao atingir múltiplos de 5000 pontos (abre a Estação de Melhorias)
       if (this.score >= this.level * this.pointsPerLevel) {
-        this.advanceLevel();
+        this.openPhaseShop();
       }
     }
 

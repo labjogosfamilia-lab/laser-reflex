@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Laser Reflex - Sobrevivência Neon</title>
-  <link rel="stylesheet" href="style.css?v=3.0">
+  <link rel="stylesheet" href="style.css?v=4.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -34,6 +34,11 @@
         <div class="hud-box hud-center">
           <span class="hud-label">PONTUAÇÃO</span>
           <span id="score-display">0</span>
+        </div>
+
+        <div class="hud-box hud-credits-box">
+          <span class="hud-label">CRÉDITOS</span>
+          <span id="run-credits-display" class="run-credits-val">🪙 0</span>
         </div>
       </div>
 
@@ -161,13 +166,13 @@
       </div>
     </div>
 
-    <!-- Tela da Loja -->
+    <!-- Tela da Loja (Skins de Drone no Menu) -->
     <div id="shop-screen" class="overlay-screen hidden">
       <div class="overlay-card shop-card">
         <div class="shop-header">
           <div class="shop-header-left">
             <h2 class="glow-title-small">CYBER LOJA</h2>
-            <p class="shop-subtitle">Personalize seu drone e compre melhorias</p>
+            <p class="shop-subtitle">Personalize a pintura neon do seu drone</p>
           </div>
           <div class="currency-badge">
             <span class="currency-icon">🪙</span>
@@ -175,21 +180,12 @@
           </div>
         </div>
 
-        <!-- Abas da Loja -->
-        <div class="shop-tabs">
-          <button class="shop-tab active" id="tab-btn-upgrades">⚡ MELHORIAS (Nv. 1-10)</button>
-          <button class="shop-tab" id="tab-btn-skins">🎨 SKINS DO DRONE</button>
-        </div>
-
-        <!-- Seção Upgrades (Aberta por padrão) -->
-        <div id="shop-upgrades-view" class="shop-content-panel">
-          <div class="upgrades-list" id="upgrades-list-container">
-            <!-- Gerado dinamicamente com níveis de 1 a 10 e preços progressivos -->
-          </div>
+        <div class="shop-powers-notice">
+          <span>⚡ <strong>Poderes e Melhorias:</strong> São adquiridos na <strong>Estação Entre Fases</strong> com os créditos que você coletar em cada fase da partida (resetam ao morrer)!</span>
         </div>
 
         <!-- Seção Skins -->
-        <div id="shop-skins-view" class="shop-content-panel hidden">
+        <div id="shop-skins-view" class="shop-content-panel">
           <div class="skins-grid">
             <div class="shop-item-card" data-skin="cyan">
               <div class="item-preview" style="background: radial-gradient(circle, #00f0ff 0%, #003344 100%);">
@@ -239,6 +235,28 @@
         </div>
 
         <button id="close-shop-btn" class="glow-btn back-btn">← VOLTAR AO MENU</button>
+      </div>
+    </div>
+
+    <!-- Modal Estação de Melhorias Entre Fases (Upgrades da Rodada) -->
+    <div id="phase-shop-modal" class="overlay-screen hidden">
+      <div class="overlay-card phase-shop-card">
+        <div class="phase-shop-header">
+          <div class="phase-cleared-tag" id="phase-shop-title">★ FASE 1 CONCLUÍDA! ★</div>
+          <h2 class="glow-title-small">ESTAÇÃO DE MELHORIAS</h2>
+          <p class="phase-shop-desc">Compre poderes com os créditos desta partida para evoluir seu drone!<br><span class="phase-shop-alert">⚠️ Acumule pelas fases! Se morrer, os poderes resetam.</span></p>
+          <div class="currency-badge phase-currency">
+            <span class="currency-icon">🪙</span>
+            <span id="phase-run-credits">0</span> CRÉDITOS DA RODADA
+          </div>
+        </div>
+
+        <!-- Lista dinâmica de upgrades da rodada -->
+        <div class="phase-upgrades-list" id="phase-upgrades-container"></div>
+
+        <div class="phase-shop-footer">
+          <button id="btn-next-phase" class="glow-btn primary-btn large-btn pulse-glow">CONTINUAR PARA A PRÓXIMA FASE ▶</button>
+        </div>
       </div>
     </div>
 
@@ -373,7 +391,7 @@
     </div>
 
   <script src="peerjs.min.js"></script>
-  <script src="network.js?v=3.0"></script>
-  <script src="game.js?v=3.0"></script>
+  <script src="network.js?v=4.0"></script>
+  <script src="game.js?v=4.0"></script>
 </body>
 </html>
