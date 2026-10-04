@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Laser Reflex - Sobrevivência Neon</title>
-  <link rel="stylesheet" href="style.css?v=9.4">
+  <link rel="stylesheet" href="style.css?v=9.5">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -435,7 +435,7 @@
           <div id="saved-accounts-chips" class="saved-accounts-chips"></div>
         </div>
 
-        <form id="auth-form" class="auth-form" onsubmit="return false;">
+        <form id="auth-form" class="auth-form">
           <div class="form-group">
             <label for="auth-nickname-input">APELIDO DO PILOTO:</label>
             <input type="text" id="auth-nickname-input" placeholder="Ex: CYBER_DRONE" maxlength="12" autocomplete="username" required />
@@ -450,7 +450,7 @@
 
           <div id="auth-status-message" class="auth-status-msg"></div>
 
-          <button type="submit" id="auth-submit-btn" class="glow-btn primary-btn large-btn">ENTRAR NO JOGO ▶</button>
+          <button type="button" id="auth-submit-btn" class="glow-btn primary-btn large-btn">ENTRAR NO JOGO ▶</button>
         </form>
 
         <button id="btn-close-auth" class="glow-btn back-btn">← VOLTAR</button>
@@ -539,9 +539,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <!-- Scripts do Jogo -->
-  <script src="database.js?v=9.4"></script>
+  <script src="database.js?v=9.5"></script>
   <script src="peerjs.min.js"></script>
-  <script src="network.js?v=9.4"></script>
-  <script src="game.js?v=9.4"></script>
+  <script src="network.js?v=9.5"></script>
+  <script src="game.js?v=9.5"></script>
 </body>
 </html>

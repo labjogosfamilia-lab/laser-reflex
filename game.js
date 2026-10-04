@@ -1851,45 +1851,160 @@ class Game {
       });
     }
 
-    if (authForm) {
-      authForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const nick = (authNickInput?.value || '').trim();
-        const pin = (authPinInput?.value || '').trim();
+    const executeAuthAction = async () => {
+      sounds.init();
+      const nick = (authNickInput?.value || '').trim();
+      const pin = (authPinInput?.value || '').trim();
 
+      if (!nick) {
         if (authStatusMsg) {
-          authStatusMsg.textContent = 'Verificando dados...';
-          authStatusMsg.style.color = '#00f0ff';
+          authStatusMsg.textContent = '⚠️ Digite seu apelido de piloto!';
+          authStatusMsg.style.color = '#ffe600';
+        }
+        authNickInput?.focus();
+        return;
+      }
+
+      if (!pin) {
+        if (authStatusMsg) {
+          authStatusMsg.textContent = '⚠️ Digite sua senha ou 8398!';
+          authStatusMsg.style.color = '#ffe600';
+        }
+        authPinInput?.focus();
+        return;
+      }
+
+      if (authStatusMsg) {
+        authStatusMsg.textContent = 'Verificando dados...';
+        authStatusMsg.style.color = '#00f0ff';
+      }
+      if (authSubmitBtn) authSubmitBtn.disabled = true;
+
+      try {
+        let user = null;
+        if (isRegisterMode) {
+          user = await this.db.register(nick, pin);
+          if (authStatusMsg) {
+            authStatusMsg.textContent = `✅ Conta "${user.nickname}" criada com sucesso!`;
+            authStatusMsg.style.color = '#00ffa3';
+          }
+        } else {
+          user = await this.db.login(nick, pin);
+          if (authStatusMsg) {
+            authStatusMsg.textContent = `✅ Bem-vindo, ${user.nickname}! Conectado com sucesso.`;
+            authStatusMsg.style.color = '#00ffa3';
+          }
         }
 
-        try {
-          if (isRegisterMode) {
-            await this.db.register(nick, pin);
-            if (authStatusMsg) {
-              authStatusMsg.textContent = '✅ Conta criada com sucesso!';
-              authStatusMsg.style.color = '#00ffa3';
+        sounds.playLevelUp();
+        setTimeout(() => {
+          if (this.domAuthModal) this.domAuthModal.classList.add('hidden');
+          if (authNickInput) authNickInput.value = '';
+          if (authPinInput) authPinInput.value = '';
+          if (authStatusMsg) authStatusMsg.textContent = '';
+          if (authSubmitBtn) authSubmitBtn.disabled = false;
+        }, 500);
+      } catch (err) {
+        sounds.playError();
+        if (authSubmitBtn) authSubmitBtn.disabled = false;
+        const msg = err.message || 'Erro ao processar.';
+
+        if (authStatusMsg) {
+          if (msg.includes('Senha/PIN') || msg.includes('incorret')) {
+            authStatusMsg.innerHTML = `
+              <div style="margin-bottom:6px;">❌ ${msg}</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">
+                <button type="button" id="btn-fallback-master-pw" class="mini-glow-btn highlight-gold" style="cursor:pointer; padding:6px 12px; font-size:0.8rem;">
+                  🔑 Entrar com Senha Mestra (8398)
+                </button>
+              </div>
+            `;
+            authStatusMsg.style.color = '#ff0055';
+
+            const btnFbMasterPw = document.getElementById('btn-fallback-master-pw');
+            if (btnFbMasterPw) {
+              btnFbMasterPw.addEventListener('click', () => {
+                if (authPinInput) authPinInput.value = '8398';
+                executeAuthAction();
+              });
+            }
+          } else if (msg.includes('não encontrado')) {
+            authStatusMsg.innerHTML = `
+              <div style="margin-bottom:6px;">⚠️ ${msg}</div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center;">
+                <button type="button" id="btn-fallback-register" class="mini-glow-btn highlight-gold" style="cursor:pointer; padding:6px 12px; font-size:0.8rem;">
+                  ✨ Cadastrar "${nick}" agora com esta senha
+                </button>
+                <button type="button" id="btn-fallback-master" class="mini-glow-btn" style="cursor:pointer; padding:6px 12px; font-size:0.8rem;">
+                  🔑 Entrar com Senha Mestra (8398)
+                </button>
+              </div>
+            `;
+            authStatusMsg.style.color = '#ffe600';
+
+            const btnFbReg = document.getElementById('btn-fallback-register');
+            if (btnFbReg) {
+              btnFbReg.addEventListener('click', async () => {
+                try {
+                  authStatusMsg.innerHTML = '⏳ Criando sua conta...';
+                  authStatusMsg.style.color = '#00f0ff';
+                  const newUser = await this.db.register(nick, pin);
+                  authStatusMsg.textContent = `✅ Conta "${newUser.nickname}" criada com sucesso!`;
+                  authStatusMsg.style.color = '#00ffa3';
+                  sounds.playLevelUp();
+                  setTimeout(() => {
+                    if (this.domAuthModal) this.domAuthModal.classList.add('hidden');
+                    if (authNickInput) authNickInput.value = '';
+                    if (authPinInput) authPinInput.value = '';
+                    if (authStatusMsg) authStatusMsg.textContent = '';
+                  }, 500);
+                } catch (e2) {
+                  authStatusMsg.textContent = e2.message;
+                  authStatusMsg.style.color = '#ff0055';
+                }
+              });
+            }
+
+            const btnFbMaster = document.getElementById('btn-fallback-master');
+            if (btnFbMaster) {
+              btnFbMaster.addEventListener('click', () => {
+                if (authPinInput) authPinInput.value = '8398';
+                executeAuthAction();
+              });
             }
           } else {
-            await this.db.login(nick, pin);
-            if (authStatusMsg) {
-              authStatusMsg.textContent = '✅ Conectado com sucesso!';
-              authStatusMsg.style.color = '#00ffa3';
-            }
-          }
-
-          sounds.playLevelUp();
-          setTimeout(() => {
-            if (this.domAuthModal) this.domAuthModal.classList.add('hidden');
-            if (authNickInput) authNickInput.value = '';
-            if (authPinInput) authPinInput.value = '';
-            if (authStatusMsg) authStatusMsg.textContent = '';
-          }, 450);
-        } catch (err) {
-          sounds.playError();
-          if (authStatusMsg) {
-            authStatusMsg.textContent = err.message || 'Erro ao processar.';
+            authStatusMsg.textContent = msg;
             authStatusMsg.style.color = '#ff0055';
           }
+        }
+      }
+    };
+
+    if (authSubmitBtn) {
+      authSubmitBtn.addEventListener('click', executeAuthAction);
+    }
+
+    if (authForm) {
+      authForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        executeAuthAction();
+      });
+    }
+
+    if (authNickInput) {
+      authNickInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (authPinInput) authPinInput.focus();
+        }
+      });
+    }
+
+    if (authPinInput) {
+      authPinInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          executeAuthAction();
         }
       });
     }

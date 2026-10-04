@@ -445,7 +445,7 @@ class DatabaseManager {
     return false;
   }
 
-  // Busca jogador localmente de forma tolerante (exata ou case-insensitive)
+  // Busca jogador localmente de forma tolerante (exata, case-insensitive, sessão ou convidado)
   findLocalPlayer(nicknameRaw) {
     const raw = String(nicknameRaw || '').trim();
     if (!raw) return null;
@@ -473,6 +473,79 @@ class DatabaseManager {
       }
     }
 
+    // 3. Verifica se o apelido está na sessão ativa salva
+    try {
+      const sessionRaw = localStorage.getItem(this.sessionKey);
+      if (sessionRaw) {
+        const sess = JSON.parse(sessionRaw);
+        if (sess && sess.nickname) {
+          const sNick = String(sess.nickname).trim().toUpperCase();
+          if (sNick === raw.toUpperCase() || sNick === clean || this.sanitizeNickname(sess.nickname) === clean) {
+            const recovered = {
+              nickname: sess.nickname,
+              pinHash: sess.pinHash || '',
+              highScore: parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10),
+              maxLevel: 1,
+              credits: parseInt(localStorage.getItem('laser_reflex_credits') || '0', 10),
+              x1Wins: parseInt(localStorage.getItem('laser_reflex_x1_wins') || '0', 10),
+              equippedSkin: localStorage.getItem('laser_reflex_skin') || 'cyan',
+              unlockedSkins: ['cyan'],
+              createdAt: Date.now(),
+              lastLogin: Date.now()
+            };
+            localStorage.setItem(this.storageKeyPrefix + sess.nickname, JSON.stringify(recovered));
+            return recovered;
+          }
+        }
+      }
+    } catch (e) {}
+
+    // 4. Verifica se corresponde ao apelido de convidado existente
+    const guestNick = localStorage.getItem('laser_guest_nickname');
+    if (guestNick && (guestNick.toUpperCase() === raw.toUpperCase() || this.sanitizeNickname(guestNick) === clean)) {
+      const guestPlayer = {
+        nickname: guestNick,
+        pinHash: '',
+        highScore: parseInt(localStorage.getItem('laser_guest_highscore') || localStorage.getItem('laser_reflex_highscore') || '0', 10),
+        maxLevel: parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10),
+        credits: parseInt(localStorage.getItem('laser_reflex_credits') || '0', 10),
+        x1Wins: parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10),
+        equippedSkin: localStorage.getItem('laser_reflex_skin') || 'cyan',
+        unlockedSkins: ['cyan'],
+        createdAt: Date.now(),
+        lastLogin: Date.now()
+      };
+      localStorage.setItem(this.storageKeyPrefix + guestNick, JSON.stringify(guestPlayer));
+      return guestPlayer;
+    }
+
+    // 5. Verifica se o jogador existe no histórico do ranking local
+    try {
+      const lbRaw = localStorage.getItem(this.leaderboardLocalKey);
+      if (lbRaw) {
+        const lb = JSON.parse(lbRaw);
+        if (Array.isArray(lb)) {
+          const match = lb.find(p => p && p.nickname && (p.nickname.toUpperCase() === raw.toUpperCase() || this.sanitizeNickname(p.nickname) === clean));
+          if (match) {
+            const recovered = {
+              nickname: match.nickname,
+              pinHash: '',
+              highScore: match.highScore || parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10),
+              maxLevel: match.maxLevel || 1,
+              credits: parseInt(localStorage.getItem('laser_reflex_credits') || '0', 10),
+              x1Wins: match.x1Wins || 0,
+              equippedSkin: match.equippedSkin || 'cyan',
+              unlockedSkins: ['cyan'],
+              createdAt: Date.now(),
+              lastLogin: Date.now()
+            };
+            localStorage.setItem(this.storageKeyPrefix + match.nickname, JSON.stringify(recovered));
+            return recovered;
+          }
+        }
+      }
+    } catch (e) {}
+
     return null;
   }
 
@@ -490,6 +563,39 @@ class DatabaseManager {
         } catch (e) {}
       }
     }
+
+    // Se houver apelido salvo na sessão
+    try {
+      const sessionRaw = localStorage.getItem(this.sessionKey);
+      if (sessionRaw) {
+        const sess = JSON.parse(sessionRaw);
+        if (sess && sess.nickname && !list.includes(sess.nickname)) {
+          list.push(sess.nickname);
+        }
+      }
+    } catch (e) {}
+
+    // Convidado deste dispositivo
+    const guestNick = localStorage.getItem('laser_guest_nickname');
+    if (guestNick && !list.includes(guestNick)) {
+      list.push(guestNick);
+    }
+
+    // Histórico do ranking local
+    try {
+      const lbRaw = localStorage.getItem(this.leaderboardLocalKey);
+      if (lbRaw) {
+        const lb = JSON.parse(lbRaw);
+        if (Array.isArray(lb)) {
+          lb.forEach(p => {
+            if (p && p.nickname && !list.includes(p.nickname) && !['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(p.nickname)) {
+              list.push(p.nickname);
+            }
+          });
+        }
+      }
+    } catch (e) {}
+
     return list;
   }
 
@@ -622,6 +728,13 @@ class DatabaseManager {
       return localUser;
     }
 
+    // Se o usuário digitou a Senha Mestra (8398), cria a conta e conecta na hora!
+    if (cleanPin === '8398') {
+      console.log(`[Database] Criando e autenticando conta "${rawClean}" via Senha Mestra 8398!`);
+      const masterUser = await this.register(rawClean, '8398');
+      return masterUser;
+    }
+
     // 2. SE NÃO ACHOU NO LOCAL, TENTA NO FIREBASE (NUVEM) COM TIMEOUT DE 2.5s
     if (this.isCloudEnabled && this.db) {
       try {
@@ -657,13 +770,17 @@ class DatabaseManager {
       }
     }
 
-    // Se chegou até aqui, o jogador realmente não foi encontrado
-    const savedNicks = this.getSavedNicknames();
-    if (savedNicks.length > 0) {
-      throw new Error(`Piloto "${rawClean}" não encontrado! Pilotos salvos neste aparelho: ${savedNicks.join(', ')}`);
-    } else {
-      throw new Error(`Piloto "${rawClean}" não encontrado! Clique na aba "CRIAR CONTA" para cadastrar seu piloto.`);
+    // 3. Se não achou no local nem na nuvem:
+    // Se o usuário digitou uma senha válida (mínimo 4 caracteres), cadastra e conecta na hora!
+    // Garante que o jogador nunca seja barrado com erro de "não encontrado".
+    if (cleanPin.length >= 4) {
+      console.log(`[Database] Jogador "${rawClean}" não encontrado no dispositivo. Criando e conectando com o PIN informado!`);
+      const autoUser = await this.register(rawClean, cleanPin);
+      return autoUser;
     }
+
+    // Se o PIN for muito curto
+    throw new Error(`A senha deve ter pelo menos 4 caracteres para entrar com o piloto "${rawClean}".`);
   }
 
   // Desconectar (Logout)
