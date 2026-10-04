@@ -1834,6 +1834,10 @@ class Game {
         tabRegister.classList.remove('active');
         if (authSubmitBtn) authSubmitBtn.textContent = 'ENTRAR NO JOGO ▶';
         if (authStatusMsg) authStatusMsg.textContent = '';
+        const savedBox = document.getElementById('saved-accounts-container');
+        if (savedBox && this.db && this.db.getSavedNicknames().length > 0) {
+          savedBox.classList.remove('hidden');
+        }
       });
 
       tabRegister.addEventListener('click', () => {
@@ -1842,6 +1846,8 @@ class Game {
         tabLogin.classList.remove('active');
         if (authSubmitBtn) authSubmitBtn.textContent = 'CRIAR CONTA E SALVAR ▶';
         if (authStatusMsg) authStatusMsg.textContent = '';
+        const savedBox = document.getElementById('saved-accounts-container');
+        if (savedBox) savedBox.classList.add('hidden');
       });
     }
 
@@ -1852,7 +1858,7 @@ class Game {
         const pin = (authPinInput?.value || '').trim();
 
         if (authStatusMsg) {
-          authStatusMsg.textContent = 'Processando...';
+          authStatusMsg.textContent = 'Verificando dados...';
           authStatusMsg.style.color = '#00f0ff';
         }
 
@@ -1860,13 +1866,13 @@ class Game {
           if (isRegisterMode) {
             await this.db.register(nick, pin);
             if (authStatusMsg) {
-              authStatusMsg.textContent = 'Conta criada com sucesso!';
+              authStatusMsg.textContent = '✅ Conta criada com sucesso!';
               authStatusMsg.style.color = '#00ffa3';
             }
           } else {
             await this.db.login(nick, pin);
             if (authStatusMsg) {
-              authStatusMsg.textContent = 'Conectado com sucesso!';
+              authStatusMsg.textContent = '✅ Conectado com sucesso!';
               authStatusMsg.style.color = '#00ffa3';
             }
           }
@@ -1876,7 +1882,8 @@ class Game {
             if (this.domAuthModal) this.domAuthModal.classList.add('hidden');
             if (authNickInput) authNickInput.value = '';
             if (authPinInput) authPinInput.value = '';
-          }, 600);
+            if (authStatusMsg) authStatusMsg.textContent = '';
+          }, 450);
         } catch (err) {
           sounds.playError();
           if (authStatusMsg) {
@@ -1997,8 +2004,46 @@ class Game {
       this.domAuthModal.classList.remove('hidden');
       const tabLogin = document.getElementById('tab-login');
       const tabRegister = document.getElementById('tab-register');
+      const authNickInput = document.getElementById('auth-nickname-input');
+      const authPinInput = document.getElementById('auth-pin-input');
       const authStatusMsg = document.getElementById('auth-status-message');
+      const savedBox = document.getElementById('saved-accounts-container');
+      const savedChips = document.getElementById('saved-accounts-chips');
+
       if (authStatusMsg) authStatusMsg.textContent = '';
+
+      // Renderiza pilotos salvos neste aparelho para preenchimento com 1 clique
+      const savedNicks = (this.db && this.db.getSavedNicknames) ? this.db.getSavedNicknames() : [];
+      if (savedBox && savedChips) {
+        if (savedNicks.length > 0 && !isRegister) {
+          savedChips.innerHTML = savedNicks.map(nick => `
+            <button type="button" class="account-chip-btn" data-nick="${nick}">
+              🛸 <strong>${nick}</strong>
+            </button>
+          `).join('');
+
+          savedChips.querySelectorAll('.account-chip-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const n = btn.getAttribute('data-nick');
+              if (authNickInput) authNickInput.value = n;
+              if (authPinInput) authPinInput.focus();
+              if (authStatusMsg) {
+                authStatusMsg.textContent = `Piloto "${n}" selecionado. Digite a senha (ou 8398) para entrar!`;
+                authStatusMsg.style.color = '#00f0ff';
+              }
+            });
+          });
+
+          savedBox.classList.remove('hidden');
+
+          // Pré-preenche se o campo de texto estiver vazio
+          if (authNickInput && !authNickInput.value) {
+            authNickInput.value = savedNicks[0];
+          }
+        } else {
+          savedBox.classList.add('hidden');
+        }
+      }
 
       if (isRegister) {
         tabRegister?.click();

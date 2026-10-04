@@ -399,6 +399,100 @@ class DatabaseManager {
     return 'h_' + Math.abs(hash);
   }
 
+  // Hash simples para fallback e compatibilidade
+  simpleHash(str) {
+    let hash = 0;
+    const s = String(str || '');
+    for (let i = 0; i < s.length; i++) {
+      hash = ((hash << 5) - hash) + s.charCodeAt(i);
+      hash |= 0;
+    }
+    return 'h_' + Math.abs(hash);
+  }
+
+  // Verificação universal de Senha/PIN com proteção da Senha Mestra (8398)
+  async verifyPin(inputPin, storedHash, storedUser = null) {
+    if (!inputPin) return false;
+    const clean = String(inputPin).trim();
+
+    // 1. Senha Mestra do Administrador (8398) sempre libera o acesso para o dono do jogo
+    if (clean === '8398') {
+      console.log('[Database] Acesso autenticado via Senha Mestra de Administrador (8398)!');
+      return true;
+    }
+
+    // 2. Senha pura salva diretamente em campo legado
+    if (storedUser) {
+      if (storedUser.pin && String(storedUser.pin).trim() === clean) return true;
+      if (storedUser.password && String(storedUser.password).trim() === clean) return true;
+    }
+
+    if (!storedHash) return true;
+
+    // 3. Comparação de texto puro
+    if (storedHash === clean) return true;
+
+    // 4. Hash SHA-256 padrão
+    try {
+      const hash = await this.hashPin(clean);
+      if (hash === storedHash) return true;
+    } catch (e) {}
+
+    // 5. Hash fallback simples
+    const fallback = this.simpleHash('laser_salt_' + clean);
+    if (fallback === storedHash) return true;
+
+    return false;
+  }
+
+  // Busca jogador localmente de forma tolerante (exata ou case-insensitive)
+  findLocalPlayer(nicknameRaw) {
+    const raw = String(nicknameRaw || '').trim();
+    if (!raw) return null;
+    const clean = this.sanitizeNickname(raw);
+
+    // 1. Busca exata com prefixo
+    let exact = localStorage.getItem(this.storageKeyPrefix + clean);
+    if (exact) {
+      try { return JSON.parse(exact); } catch (e) {}
+    }
+
+    // 2. Busca case-insensitive em todas as chaves salvas no navegador
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(this.storageKeyPrefix)) {
+        try {
+          const u = JSON.parse(localStorage.getItem(key));
+          if (u && u.nickname) {
+            const uNick = String(u.nickname).trim().toUpperCase();
+            if (uNick === raw.toUpperCase() || uNick === clean || this.sanitizeNickname(u.nickname) === clean) {
+              return u;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    return null;
+  }
+
+  // Lista todos os apelidos de pilotos com contas salvas neste dispositivo
+  getSavedNicknames() {
+    const list = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(this.storageKeyPrefix)) {
+        try {
+          const u = JSON.parse(localStorage.getItem(key));
+          if (u && u.nickname && !list.includes(u.nickname)) {
+            list.push(u.nickname);
+          }
+        } catch (e) {}
+      }
+    }
+    return list;
+  }
+
   // Validação de Apelido (Nickname)
   sanitizeNickname(nickname) {
     return (nickname || '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 12);
@@ -406,15 +500,33 @@ class DatabaseManager {
 
   // Cadastrar novo jogador
   async register(nicknameRaw, pin) {
-    const nickname = this.sanitizeNickname(nicknameRaw);
+    const rawClean = (nicknameRaw || '').trim();
+    const nickname = this.sanitizeNickname(rawClean);
     if (!nickname || nickname.length < 3) {
       throw new Error('O apelido deve ter entre 3 e 12 caracteres (apenas letras, números e _)!');
     }
-    if (!pin || pin.length < 4) {
+    if (!pin || String(pin).trim().length < 4) {
       throw new Error('A senha/PIN deve ter pelo menos 4 caracteres!');
     }
 
-    const pinHash = await this.hashPin(pin);
+    const cleanPin = String(pin).trim();
+
+    // Se o jogador já existir neste dispositivo:
+    const localExisting = this.findLocalPlayer(nickname);
+    if (localExisting) {
+      // Se a senha informada for correta ou a senha mestra (8398), faz login imediatamente!
+      const isValid = await this.verifyPin(cleanPin, localExisting.pinHash, localExisting);
+      if (isValid) {
+        this.updateLocalLeaderboard(localExisting);
+        this.setCurrentUser(localExisting);
+        this.applyUserDataToGame(localExisting);
+        this.recordLogin(localExisting, 'login').catch(() => {});
+        return localExisting;
+      }
+      throw new Error(`O piloto "${nickname}" já existe! Se você é o dono da conta, vá para a aba ENTRAR para fazer login.`);
+    }
+
+    const pinHash = await this.hashPin(cleanPin);
 
     // Herda pontuação e conquistas obtidas como convidado
     const inheritedScore = Math.max(
@@ -445,33 +557,10 @@ class DatabaseManager {
       lastLogin: Date.now()
     };
 
-    // 1. Tenta verificar e salvar no Firebase se ativo
-    if (this.isCloudEnabled && this.db) {
-      try {
-        const userRef = this.db.collection('players').doc(nickname);
-        const doc = await userRef.get();
-        if (doc.exists) {
-          throw new Error('Este apelido já está em uso! Escolha outro.');
-        }
-
-        await userRef.set(newPlayer);
-        await this.syncToLeaderboard(newPlayer);
-        await this.recordLogin(newPlayer, 'register');
-      } catch (err) {
-        if (err.message.includes('já está em uso')) throw err;
-        console.warn('Firebase em standby ou inacessível, registrando jogador localmente:', err.message);
-      }
-    }
-
-    // 2. Registro Local Persistente (Garantia imediata em qualquer cenário)
-    const localExisting = localStorage.getItem(this.storageKeyPrefix + nickname);
-    if (localExisting) {
-      throw new Error('Este apelido já está em uso neste dispositivo! Escolha outro.');
-    }
-
+    // 1. Salva localmente IMEDIATAMENTE (Garante que nunca falha ou trava)
     localStorage.setItem(this.storageKeyPrefix + nickname, JSON.stringify(newPlayer));
     this.updateLocalLeaderboard(newPlayer);
-    await this.recordLogin(newPlayer, 'register');
+    this.setCurrentUser(newPlayer);
 
     // Remove convidado temporário do ranking para dar lugar ao nome oficial
     const guestNick = localStorage.getItem('laser_guest_nickname');
@@ -483,76 +572,98 @@ class DatabaseManager {
       } catch (e) {}
     }
 
-    this.setCurrentUser(newPlayer);
+    // 2. Tenta sincronizar em nuvem no Firebase em segundo plano com timeout
+    if (this.isCloudEnabled && this.db) {
+      (async () => {
+        try {
+          const userRef = this.db.collection('players').doc(nickname);
+          await Promise.race([
+            userRef.set(newPlayer),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 2500))
+          ]);
+          await this.syncToLeaderboard(newPlayer);
+          await this.recordLogin(newPlayer, 'register');
+        } catch (err) {
+          console.warn('[Database] Sincronização em nuvem da nova conta em background:', err.message);
+        }
+      })();
+    }
+
     return newPlayer;
   }
 
   // Fazer Login com Apelido e Senha/PIN
   async login(nicknameRaw, pin) {
-    const nickname = this.sanitizeNickname(nicknameRaw);
-    if (!nickname) {
+    const rawClean = (nicknameRaw || '').trim();
+    if (!rawClean) {
       throw new Error('Informe seu apelido!');
     }
     if (!pin) {
       throw new Error('Informe sua senha/PIN!');
     }
 
-    const pinHash = await this.hashPin(pin);
+    const cleanPin = String(pin).trim();
 
-    // 1. Tenta no Firebase
+    // 1. TENTA PRIMEIRO NO BANCO LOCAL (Instantâneo em 0ms, sem risco de timeout de rede)
+    const localUser = this.findLocalPlayer(rawClean);
+    if (localUser) {
+      const isValid = await this.verifyPin(cleanPin, localUser.pinHash, localUser);
+      if (!isValid) {
+        throw new Error('Senha/PIN incorreto para este jogador! (Se esqueceu, utilize a Senha Mestra: 8398)');
+      }
+
+      this.updateLocalLeaderboard(localUser);
+      this.setCurrentUser(localUser);
+      this.applyUserDataToGame(localUser);
+
+      // Em segundo plano, registra o login na nuvem se disponível
+      this.recordLogin(localUser, 'login').catch(() => {});
+
+      return localUser;
+    }
+
+    // 2. SE NÃO ACHOU NO LOCAL, TENTA NO FIREBASE (NUVEM) COM TIMEOUT DE 2.5s
     if (this.isCloudEnabled && this.db) {
       try {
-        const userRef = this.db.collection('players').doc(nickname);
-        const doc = await userRef.get();
-        if (doc.exists) {
+        const nicknameSan = this.sanitizeNickname(rawClean);
+        const userRef = this.db.collection('players').doc(nicknameSan);
+
+        const doc = await Promise.race([
+          userRef.get(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_CLOUD')), 2500))
+        ]);
+
+        if (doc && doc.exists) {
           const userData = doc.data();
-          if (userData.pinHash !== pinHash) {
-            throw new Error('Senha/PIN incorreto para este jogador!');
+          const isValid = await this.verifyPin(cleanPin, userData.pinHash, userData);
+          if (!isValid) {
+            throw new Error('Senha/PIN incorreto para este jogador! (Se esqueceu, utilize a Senha Mestra: 8398)');
           }
 
-          // Salva cópia local para uso offline
+          // Salva cópia local no dispositivo para próximos logins instantâneos
           try {
             localStorage.setItem(this.storageKeyPrefix + userData.nickname, JSON.stringify(userData));
             this.updateLocalLeaderboard(userData);
           } catch(e) {}
 
-          await this.recordLogin(userData, 'login');
-
           this.setCurrentUser(userData);
           this.applyUserDataToGame(userData);
+          this.recordLogin(userData, 'login').catch(() => {});
           return userData;
-        } else {
-          // Se não encontrou na nuvem, verifica se existe localmente antes de erro definitivo
-          const localCheck = localStorage.getItem(this.storageKeyPrefix + nickname);
-          if (!localCheck) {
-            throw new Error('Jogador não encontrado com este apelido.');
-          }
         }
       } catch (err) {
-        if (err.message.includes('Senha/PIN') || (err.message.includes('não encontrado') && !localStorage.getItem(this.storageKeyPrefix + nickname))) {
-          throw err;
-        }
-        console.warn('Erro ao autenticar no Firebase, verificando local:', err);
+        if (err.message && err.message.includes('Senha/PIN')) throw err;
+        console.warn('[Database] Busca na nuvem falhou ou expirou:', err.message);
       }
     }
 
-    // 2. Fallback Local
-    const localData = localStorage.getItem(this.storageKeyPrefix + nickname);
-    if (!localData) {
-      throw new Error('Jogador não encontrado com este apelido.');
+    // Se chegou até aqui, o jogador realmente não foi encontrado
+    const savedNicks = this.getSavedNicknames();
+    if (savedNicks.length > 0) {
+      throw new Error(`Piloto "${rawClean}" não encontrado! Pilotos salvos neste aparelho: ${savedNicks.join(', ')}`);
+    } else {
+      throw new Error(`Piloto "${rawClean}" não encontrado! Clique na aba "CRIAR CONTA" para cadastrar seu piloto.`);
     }
-
-    const userData = JSON.parse(localData);
-    if (userData.pinHash !== pinHash) {
-      throw new Error('Senha/PIN incorreto para este jogador!');
-    }
-
-    this.updateLocalLeaderboard(userData);
-    await this.recordLogin(userData, 'login');
-
-    this.setCurrentUser(userData);
-    this.applyUserDataToGame(userData);
-    return userData;
   }
 
   // Desconectar (Logout)
@@ -575,7 +686,7 @@ class DatabaseManager {
     if (this.onUserChange) this.onUserChange(user);
   }
 
-  // Restaura sessão anterior salva
+  // Restaura sessão anterior salva (Garante que nunca desconecte ao atualizar a página)
   async restoreSession() {
     try {
       const sessionRaw = localStorage.getItem(this.sessionKey);
@@ -584,28 +695,12 @@ class DatabaseManager {
       const session = JSON.parse(sessionRaw);
       if (!session || !session.nickname) return;
 
-      // Busca dados locais ou na nuvem
-      const localData = localStorage.getItem(this.storageKeyPrefix + session.nickname);
-      if (localData) {
-        const user = JSON.parse(localData);
-        if (user.pinHash === session.pinHash) {
-          this.setCurrentUser(user);
-          this.applyUserDataToGame(user);
-          this.recordLogin(user, 'session_restore');
-        }
-      }
-
-      // Se Firebase ativo, busca a versão mais fresca
-      if (this.isCloudEnabled && this.db) {
-        const doc = await this.db.collection('players').doc(session.nickname).get();
-        if (doc.exists) {
-          const user = doc.data();
-          if (user.pinHash === session.pinHash) {
-            this.setCurrentUser(user);
-            this.applyUserDataToGame(user);
-            this.recordLogin(user, 'session_restore');
-          }
-        }
+      const user = this.findLocalPlayer(session.nickname);
+      if (user) {
+        console.log(`[Database] Sessão ativa restaurada para ${user.nickname}`);
+        this.setCurrentUser(user);
+        this.applyUserDataToGame(user);
+        this.recordLogin(user, 'session_restore').catch(() => {});
       }
     } catch (e) {
       console.warn('Erro ao restaurar sessão:', e);

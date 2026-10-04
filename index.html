@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Laser Reflex - Sobrevivência Neon</title>
-  <link rel="stylesheet" href="style.css?v=9.3">
+  <link rel="stylesheet" href="style.css?v=9.4">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -430,6 +430,11 @@
           <button id="tab-register" class="auth-tab-btn">CRIAR CONTA</button>
         </div>
 
+        <div id="saved-accounts-container" class="saved-accounts-container hidden">
+          <span class="saved-accounts-title">🛸 Contas encontradas neste aparelho (clique para preencher):</span>
+          <div id="saved-accounts-chips" class="saved-accounts-chips"></div>
+        </div>
+
         <form id="auth-form" class="auth-form" onsubmit="return false;">
           <div class="form-group">
             <label for="auth-nickname-input">APELIDO DO PILOTO:</label>
@@ -440,7 +445,7 @@
           <div class="form-group">
             <label for="auth-pin-input">SENHA / PIN SECRETO:</label>
             <input type="password" id="auth-pin-input" placeholder="Mínimo 4 caracteres" maxlength="20" autocomplete="current-password" required />
-            <span class="input-hint">Para recuperar seu progresso em qualquer celular ou PC</span>
+            <span class="input-hint">Digite sua senha ou a Senha Mestra (8398)</span>
           </div>
 
           <div id="auth-status-message" class="auth-status-msg"></div>
@@ -534,9 +539,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <!-- Scripts do Jogo -->
-  <script src="database.js?v=9.3"></script>
+  <script src="database.js?v=9.4"></script>
   <script src="peerjs.min.js"></script>
-  <script src="network.js?v=9.3"></script>
-  <script src="game.js?v=9.3"></script>
+  <script src="network.js?v=9.4"></script>
+  <script src="game.js?v=9.4"></script>
 </body>
 </html>
