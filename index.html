@@ -63,10 +63,24 @@
         </div>
       </div>
 
-      <div class="hud-box hud-right">
-        <span class="hud-label">DASH [ESPAÇO]</span>
-        <div class="dash-bar-container">
-          <div id="dash-bar"></div>
+      <div class="hud-actions-group">
+        <!-- Barra de Tiro a Laser -->
+        <div class="hud-box hud-shoot-box">
+          <div class="hud-box-header">
+            <span class="hud-label">TIRO [E / CLIQUE]</span>
+            <span id="shoot-timer-text" class="shoot-status-text ready">⚡ PRONTO</span>
+          </div>
+          <div class="shoot-bar-container">
+            <div id="shoot-bar" class="ready"></div>
+          </div>
+        </div>
+
+        <!-- Barra de Dash -->
+        <div class="hud-box hud-dash-box">
+          <span class="hud-label">DASH [ESPAÇO]</span>
+          <div class="dash-bar-container">
+            <div id="dash-bar"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -93,6 +107,10 @@
           <div class="instruction-row">
             <span class="key-badge">ESPAÇO</span>
             <span class="key-desc">Dash Evasivo (Fica Invulnerável)</span>
+          </div>
+          <div class="instruction-row">
+            <span class="key-badge">E</span> / <span class="key-badge">J</span> / <span class="key-badge">CLIQUE</span>
+            <span class="key-desc">Tiro a Laser (Recarga 5s — Perfura Escudo do Adversário!)</span>
           </div>
           <div class="instruction-row">
             <span class="icon-desc">⚠️</span>
@@ -347,8 +365,10 @@
         <div id="touch-stick-base">
           <div id="touch-stick-handle"></div>
         </div>
+      <div class="mobile-actions-group">
+        <button id="mobile-shoot-btn" class="mobile-action-btn shoot-btn">TIRO</button>
+        <button id="mobile-dash-btn" class="mobile-action-btn">DASH</button>
       </div>
-      <button id="mobile-dash-btn" class="mobile-action-btn">DASH</button>
     </div>
   </div>
 

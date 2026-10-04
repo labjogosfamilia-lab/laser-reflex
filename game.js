@@ -315,6 +315,51 @@ class SoundController {
     osc.start();
     osc.stop(this.ctx.currentTime + 0.18);
   }
+
+  playShoot() {
+    if (!this.enabled || !this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(880, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.16);
+
+    gain.gain.setValueAtTime(0.24, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.16);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    osc.stop(this.ctx.currentTime + 0.16);
+  }
+
+  playPiercingHit() {
+    if (!this.enabled || !this.ctx) return;
+    // Impacto perfurante pesado: oscilador agudo decaindo + choque de estilhaço grave
+    const osc1 = this.ctx.createOscillator();
+    const gain1 = this.ctx.createGain();
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(1400, this.ctx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(180, this.ctx.currentTime + 0.25);
+    gain1.gain.setValueAtTime(0.3, this.ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+    osc1.connect(gain1);
+    gain1.connect(this.ctx.destination);
+    osc1.start();
+    osc1.stop(this.ctx.currentTime + 0.25);
+
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(95, this.ctx.currentTime);
+    osc2.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 0.35);
+    gain2.gain.setValueAtTime(0.35, this.ctx.currentTime);
+    gain2.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+    osc2.connect(gain2);
+    gain2.connect(this.ctx.destination);
+    osc2.start();
+    osc2.stop(this.ctx.currentTime + 0.35);
+  }
 }
 
 const sounds = new SoundController();
@@ -384,6 +429,10 @@ class Player {
     this.dashDirX = 0;
     this.dashDirY = 0;
 
+    // Tiro a Laser (Bala Perfurante - 5s de recarga)
+    this.shootCooldownMax = 5.0;
+    this.shootCooldownTimer = 0;
+
     // Rastro visual (Afterimage)
     this.trail = [];
     this.nameTag = null;
@@ -398,6 +447,7 @@ class Player {
     this.invulnerableTimer = 0;
     this.shieldActive = false;
     this.dashCooldownTimer = 0;
+    this.shootCooldownTimer = 0;
     this.isDashing = false;
     this.dashTimer = 0;
     this.trail = [];
@@ -424,6 +474,57 @@ class Player {
     this.dashCooldownTimer = this.dashCooldownMax;
 
     sounds.playDash();
+    return true;
+  }
+
+  triggerShoot(aimDirX, aimDirY) {
+    if (this.shootCooldownTimer > 0) return null;
+
+    let dx = aimDirX;
+    let dy = aimDirY;
+    if (dx === undefined || dy === undefined || (dx === 0 && dy === 0)) {
+      dx = this.dashDirX || 1;
+      dy = this.dashDirY || 0;
+    }
+
+    const len = Math.hypot(dx, dy) || 1;
+    const dirX = dx / len;
+    const dirY = dy / len;
+
+    this.dashDirX = dirX;
+    this.dashDirY = dirY;
+    this.shootCooldownTimer = this.shootCooldownMax;
+
+    sounds.playShoot();
+
+    // Ponto de saída na ponta frontal do drone
+    const spawnDist = this.radius * 1.4;
+    return {
+      x: this.x + dirX * spawnDist,
+      y: this.y + dirY * spawnDist,
+      dirX: dirX,
+      dirY: dirY
+    };
+  }
+
+  takePiercingDamage(particles) {
+    if (this.invulnerableTimer > 0 || this.isDashing) {
+      return false; // Ileso pelo dash ativo ou invulnerabilidade
+    }
+
+    // Perfura o escudo! Elimina 1 vida diretamente mesmo se ele tiver escudo
+    this.lives--;
+    this.invulnerableTimer = 1.0;
+    sounds.playPiercingHit();
+
+    // Partículas densas de impacto perfurante
+    for (let i = 0; i < 40; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 90 + Math.random() * 220;
+      const color = (i % 2 === 0) ? '#ff0055' : '#ffffff';
+      particles.push(new Particle(this.x, this.y, color, Math.cos(ang) * spd, Math.sin(ang) * spd, 0.6, 3.5));
+    }
+
     return true;
   }
 
@@ -466,6 +567,10 @@ class Player {
     }
     if (this.dashCooldownTimer > 0) {
       this.dashCooldownTimer -= dt;
+    }
+    if (this.shootCooldownTimer > 0) {
+      this.shootCooldownTimer -= dt;
+      if (this.shootCooldownTimer < 0) this.shootCooldownTimer = 0;
     }
 
     // Física de Movimento
@@ -608,6 +713,103 @@ class Player {
       ctx.fillText(this.nameTag, this.x, tagY);
       ctx.restore();
     }
+  }
+}
+
+// --- CLASSE DO PROJÉTIL A LASER (BALA PERFURANTE) ---
+class LaserBullet {
+  constructor(options) {
+    this.id = options.id || ('b_' + Math.random().toString(36).substr(2, 9));
+    this.shooterId = options.shooterId || 'player'; // 'p1', 'p2' ou 'player'
+    this.x = options.x;
+    this.y = options.y;
+    this.dirX = options.dirX;
+    this.dirY = options.dirY;
+    this.speed = options.speed || 620;
+    this.color = options.color || '#00f0ff';
+    this.radius = 6;
+    this.life = options.life || 2.4;
+    this.trail = [];
+  }
+
+  update(dt, particles) {
+    this.x += this.dirX * this.speed * dt;
+    this.y += this.dirY * this.speed * dt;
+    this.life -= dt;
+
+    // Rastro dinâmico do projétil
+    this.trail.unshift({ x: this.x, y: this.y, alpha: 0.85 });
+    if (this.trail.length > 6) this.trail.pop();
+    for (let t of this.trail) {
+      t.alpha -= dt * 3.5;
+    }
+
+    // Centelhas sutis ao voar
+    if (Math.random() < 0.4 && particles) {
+      particles.push(new Particle(
+        this.x + (Math.random() - 0.5) * 4,
+        this.y + (Math.random() - 0.5) * 4,
+        this.color,
+        -this.dirX * 50 + (Math.random() - 0.5) * 30,
+        -this.dirY * 50 + (Math.random() - 0.5) * 30,
+        0.2,
+        2.5
+      ));
+    }
+  }
+
+  draw(ctx) {
+    ctx.save();
+
+    // Rastro neon
+    for (let t of this.trail) {
+      if (t.alpha <= 0) continue;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, t.alpha * 0.6);
+      ctx.fillStyle = this.color;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, this.radius * 0.75, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Projétil em formato de cápsula luminosa (Bala de Laser)
+    ctx.translate(this.x, this.y);
+    const angle = Math.atan2(this.dirY, this.dirX);
+    ctx.rotate(angle);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 16;
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 11, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 13, 5.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  checkCollision(targetX, targetY, targetRadius) {
+    const dist = Math.hypot(this.x - targetX, this.y - targetY);
+    return dist < (this.radius + targetRadius);
+  }
+
+  isOutOfBounds() {
+    return (
+      this.x < -20 ||
+      this.x > VIRTUAL_WIDTH + 20 ||
+      this.y < -20 ||
+      this.y > VIRTUAL_HEIGHT + 20 ||
+      this.life <= 0
+    );
   }
 }
 
@@ -1102,6 +1304,12 @@ class Game {
     this.domX1StatMyLives = document.getElementById('x1-stat-my-lives');
     this.domX1StatEnemyLives = document.getElementById('x1-stat-enemy-lives');
 
+    // Sistema de Balas de Laser
+    this.bullets = [];
+    this.domShootBar = document.getElementById('shoot-bar');
+    this.domShootTimerText = document.getElementById('shoot-timer-text');
+    this.domMobileShootBtn = document.getElementById('mobile-shoot-btn');
+
     // Inicializa gerenciador de rede
     this.network = new NetworkManager(this);
     this.initMultiplayerEvents();
@@ -1120,8 +1328,27 @@ class Game {
     this.canvas.height = VIRTUAL_HEIGHT;
   }
 
+  getVirtualMousePos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = VIRTUAL_WIDTH / rect.width;
+    const scaleY = VIRTUAL_HEIGHT / rect.height;
+    return {
+      x: (e.clientX - rect.left) * scaleX,
+      y: (e.clientY - rect.top) * scaleY
+    };
+  }
+
   setupEventListeners() {
     window.addEventListener('resize', () => this.initCanvasSize());
+
+    // Disparo por clique do Mouse direcionado ao cursor
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (this.gameState === STATE.PLAYING) {
+        sounds.init();
+        const pos = this.getVirtualMousePos(e);
+        this.triggerPlayerShoot(pos.x, pos.y);
+      }
+    });
 
     // Teclado
     window.addEventListener('keydown', (e) => {
@@ -1131,6 +1358,13 @@ class Game {
         if (this.gameState === STATE.PLAYING) {
           const { x, y } = this.getInputDirection();
           this.player.triggerDash(x, y);
+        }
+      }
+      if (e.code === 'KeyE' || e.code === 'KeyJ' || e.code === 'Enter') {
+        e.preventDefault();
+        if (this.gameState === STATE.PLAYING) {
+          sounds.init();
+          this.triggerPlayerShoot();
         }
       }
     });
@@ -1357,6 +1591,20 @@ class Game {
           this.player.triggerDash(this.touchVector.x, this.touchVector.y);
         }
       });
+    }
+
+    // Mobile Tiro a Laser (Recarga de 5s)
+    const shootBtn = document.getElementById('mobile-shoot-btn');
+    if (shootBtn) {
+      const handleShoot = (e) => {
+        e.preventDefault();
+        sounds.init();
+        if (this.gameState === STATE.PLAYING) {
+          this.triggerPlayerShoot();
+        }
+      };
+      shootBtn.addEventListener('touchstart', handleShoot);
+      shootBtn.addEventListener('click', handleShoot);
     }
 
     // Touch Joystick Virtual
@@ -1595,6 +1843,7 @@ class Game {
     this.lasers = [];
     this.pickups = [];
     this.particles = [];
+    this.bullets = [];
     this.laserSpawnTimer = 0;
     this.pickupSpawnTimer = 0;
     this.rematchRequested = false;
@@ -1611,29 +1860,29 @@ class Game {
     if (this.domHudSingle) this.domHudSingle.classList.add('hidden');
     if (this.domHudX1) this.domHudX1.classList.remove('hidden');
 
-    // Configuração dos Drones e Tags P1 e P2
+    // Configuração dos Drones e Cores Distintas (P1 Ciano vs P2 Carmesim)
     if (this.isHost) {
       this.player.reset(180, VIRTUAL_HEIGHT / 2);
-      this.player.nameTag = 'P1 (VOCÊ)';
-      this.player.skinColor = SKINS[this.equippedSkin]?.color || '#00f0ff';
+      this.player.nameTag = 'P1 (VOCÊ) - CIANO';
+      this.player.skinColor = '#00f0ff';
 
       this.remotePlayer.reset(VIRTUAL_WIDTH - 180, VIRTUAL_HEIGHT / 2);
-      this.remotePlayer.nameTag = 'P2 (RIVAL)';
+      this.remotePlayer.nameTag = 'P2 (RIVAL) - CARMESIM';
       this.remotePlayer.skinColor = '#ff0055';
 
-      if (this.domX1P1Name) this.domX1P1Name.textContent = 'P1 (VOCÊ)';
-      if (this.domX1P2Name) this.domX1P2Name.textContent = 'P2 (RIVAL)';
+      if (this.domX1P1Name) this.domX1P1Name.textContent = 'P1 (VOCÊ) - CIANO';
+      if (this.domX1P2Name) this.domX1P2Name.textContent = 'P2 (RIVAL) - CARMESIM';
     } else {
       this.player.reset(VIRTUAL_WIDTH - 180, VIRTUAL_HEIGHT / 2);
-      this.player.nameTag = 'P2 (VOCÊ)';
-      this.player.skinColor = SKINS[this.equippedSkin]?.color || '#ff0055';
+      this.player.nameTag = 'P2 (VOCÊ) - CARMESIM';
+      this.player.skinColor = '#ff0055';
 
       this.remotePlayer.reset(180, VIRTUAL_HEIGHT / 2);
-      this.remotePlayer.nameTag = 'P1 (RIVAL)';
+      this.remotePlayer.nameTag = 'P1 (RIVAL) - CIANO';
       this.remotePlayer.skinColor = '#00f0ff';
 
-      if (this.domX1P1Name) this.domX1P1Name.textContent = 'P1 (RIVAL)';
-      if (this.domX1P2Name) this.domX1P2Name.textContent = 'P2 (VOCÊ)';
+      if (this.domX1P1Name) this.domX1P1Name.textContent = 'P1 (RIVAL) - CIANO';
+      if (this.domX1P2Name) this.domX1P2Name.textContent = 'P2 (VOCÊ) - CARMESIM';
     }
 
     // Melhores atributos da loja para o jogador local
@@ -1684,6 +1933,9 @@ class Game {
         this.domDashBar.classList.remove('ready');
       }
     }
+
+    // Atualiza Barra e Status do Tiro a Laser
+    this.updateShootHUD();
   }
 
   handleNetworkMessage(msg) {
@@ -1699,11 +1951,47 @@ class Game {
         this.remotePlayer.y = msg.y;
         this.remotePlayer.vx = msg.vx;
         this.remotePlayer.vy = msg.vy;
+        if (msg.dirX !== undefined && msg.dirY !== undefined) {
+          this.remotePlayer.dashDirX = msg.dirX;
+          this.remotePlayer.dashDirY = msg.dirY;
+        }
         this.remotePlayer.isDashing = msg.isDashing;
         this.remotePlayer.lives = msg.lives;
         this.remotePlayer.shieldActive = msg.shieldActive;
         if (msg.skinColor) this.remotePlayer.skinColor = msg.skinColor;
         this.updateX1HUD();
+
+        if (this.gameState === STATE.PLAYING && this.remotePlayer.lives <= 0) {
+          this.triggerX1GameOver(true);
+        }
+        break;
+
+      case 'SPAWN_BULLET':
+        if (msg.bullet) {
+          if (!this.bullets.some(b => b.id === msg.bullet.id)) {
+            this.bullets.push(new LaserBullet(msg.bullet));
+            sounds.playShoot();
+          }
+        }
+        break;
+
+      case 'PLAYER_BULLET_HIT':
+        for (let i = this.bullets.length - 1; i >= 0; i--) {
+          if (this.bullets[i].id === msg.bulletId) {
+            this.bullets.splice(i, 1);
+            break;
+          }
+        }
+        this.remotePlayer.lives = msg.lives;
+        this.remotePlayer.shieldActive = msg.shieldActive;
+        this.updateX1HUD();
+        sounds.playPiercingHit();
+
+        for (let k = 0; k < 35; k++) {
+          const ang = Math.random() * Math.PI * 2;
+          const spd = 70 + Math.random() * 180;
+          this.particles.push(new Particle(this.remotePlayer.x, this.remotePlayer.y, '#ff0055', Math.cos(ang) * spd, Math.sin(ang) * spd, 0.55, 3.5));
+        }
 
         if (this.gameState === STATE.PLAYING && this.remotePlayer.lives <= 0) {
           this.triggerX1GameOver(true);
@@ -1819,6 +2107,7 @@ class Game {
     this.lasers = [];
     this.pickups = [];
     this.particles = [];
+    this.bullets = [];
   }
 
   addLaser(options) {
@@ -1847,6 +2136,7 @@ class Game {
     this.lasers = [];
     this.pickups = [];
     this.particles = [];
+    this.bullets = [];
     this.laserSpawnTimer = 0;
     this.pickupSpawnTimer = 0;
     this.laserRainActive = false;
@@ -2365,6 +2655,105 @@ class Game {
     } else {
       this.domDashBar.classList.remove('ready');
     }
+
+    // Atualiza Barra e Status do Tiro a Laser
+    this.updateShootHUD();
+  }
+
+  triggerPlayerShoot(aimWorldX, aimWorldY) {
+    if (this.gameState !== STATE.PLAYING) return;
+
+    let dirX = 0;
+    let dirY = 0;
+    if (aimWorldX !== undefined && aimWorldY !== undefined) {
+      dirX = aimWorldX - this.player.x;
+      dirY = aimWorldY - this.player.y;
+    } else {
+      dirX = this.player.dashDirX || 1;
+      dirY = this.player.dashDirY || 0;
+    }
+
+    const shotData = this.player.triggerShoot(dirX, dirY);
+    if (!shotData) return; // Recarga ainda em andamento
+
+    const myRole = this.isMultiplayer ? (this.isHost ? 'p1' : 'p2') : 'player';
+    const bulletColor = this.isMultiplayer
+      ? (this.isHost ? '#00f0ff' : '#ff0055')
+      : (this.player.skinColor || '#00f0ff');
+
+    const bulletId = 'b_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    const bullet = new LaserBullet({
+      id: bulletId,
+      shooterId: myRole,
+      x: shotData.x,
+      y: shotData.y,
+      dirX: shotData.dirX,
+      dirY: shotData.dirY,
+      speed: 620,
+      color: bulletColor
+    });
+
+    this.bullets.push(bullet);
+
+    // Efeito de partículas no canhão do drone
+    for (let k = 0; k < 14; k++) {
+      const ang = Math.atan2(shotData.dirY, shotData.dirX) + (Math.random() - 0.5) * 1.3;
+      const spd = 40 + Math.random() * 90;
+      this.particles.push(new Particle(shotData.x, shotData.y, bulletColor, Math.cos(ang) * spd, Math.sin(ang) * spd, 0.3, 3));
+    }
+
+    if (this.isMultiplayer && this.network.isConnected) {
+      this.network.send({
+        type: 'SPAWN_BULLET',
+        bullet: {
+          id: bullet.id,
+          shooterId: myRole,
+          x: bullet.x,
+          y: bullet.y,
+          dirX: bullet.dirX,
+          dirY: bullet.dirY,
+          speed: bullet.speed,
+          color: bullet.color
+        }
+      });
+    }
+
+    this.updateShootHUD();
+  }
+
+  updateShootHUD() {
+    const cd = this.player.shootCooldownTimer;
+    const maxCd = this.player.shootCooldownMax;
+    const ratio = Math.max(0, 1 - (cd / maxCd));
+
+    if (this.domShootBar) {
+      this.domShootBar.style.width = `${ratio * 100}%`;
+      if (cd <= 0) {
+        this.domShootBar.classList.add('ready');
+      } else {
+        this.domShootBar.classList.remove('ready');
+      }
+    }
+
+    if (this.domShootTimerText) {
+      if (cd <= 0) {
+        this.domShootTimerText.textContent = '⚡ TIRO PRONTO (E / CLIQUE)';
+        this.domShootTimerText.classList.add('ready');
+      } else {
+        this.domShootTimerText.textContent = `⏳ RECARGA: ${cd.toFixed(1)}s`;
+        this.domShootTimerText.classList.remove('ready');
+      }
+    }
+
+    if (this.domMobileShootBtn) {
+      if (cd <= 0) {
+        this.domMobileShootBtn.classList.add('ready');
+        this.domMobileShootBtn.style.opacity = '1';
+      } else {
+        this.domMobileShootBtn.classList.remove('ready');
+        this.domMobileShootBtn.style.opacity = '0.55';
+      }
+    }
   }
 
   update(dt) {
@@ -2382,6 +2771,8 @@ class Game {
           y: this.player.y,
           vx: this.player.vx,
           vy: this.player.vy,
+          dirX: this.player.dashDirX,
+          dirY: this.player.dashDirY,
           isDashing: this.player.isDashing,
           lives: this.player.lives,
           shieldActive: this.player.shieldActive,
@@ -2550,6 +2941,49 @@ class Game {
       }
     }
 
+    // Atualiza Balas de Laser e Colisões (Dano Perfurante)
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const b = this.bullets[i];
+      b.update(dt, this.particles);
+
+      if (b.isOutOfBounds()) {
+        this.bullets.splice(i, 1);
+        continue;
+      }
+
+      // No modo Multiplayer: se a bala pertence ao oponente, checa acerto no jogador local
+      if (this.isMultiplayer) {
+        const myRole = this.isHost ? 'p1' : 'p2';
+        if (b.shooterId !== myRole && b.checkCollision(this.player.x, this.player.y, this.player.radius)) {
+          // O tiro a laser perfura o escudo e elimina uma vida diretamente!
+          const tookHit = this.player.takePiercingDamage(this.particles);
+          this.bullets.splice(i, 1);
+
+          if (tookHit) {
+            this.screenShake = 16;
+            this.updateX1HUD();
+            this.network.send({
+              type: 'PLAYER_BULLET_HIT',
+              bulletId: b.id,
+              lives: this.player.lives,
+              shieldActive: this.player.shieldActive
+            });
+
+            if (this.player.lives <= 0) {
+              const enemyRole = this.isHost ? 'p2' : 'p1';
+              this.network.send({
+                type: 'GAME_OVER_X1',
+                winner: enemyRole
+              });
+              this.triggerX1GameOver(false);
+              return;
+            }
+          }
+          continue;
+        }
+      }
+    }
+
     // Atualiza Coletáveis (Pickups)
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const p = this.pickups[i];
@@ -2702,6 +3136,10 @@ class Game {
 
     for (let l of this.lasers) {
       l.draw(this.ctx);
+    }
+
+    for (let b of this.bullets) {
+      b.draw(this.ctx);
     }
 
     for (let part of this.particles) {
