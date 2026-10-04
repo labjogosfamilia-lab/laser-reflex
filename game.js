@@ -1917,13 +1917,39 @@ class Game {
       });
     }
 
-    const btnZeroRanking = document.getElementById('btn-zero-ranking');
-    if (btnZeroRanking) {
-      btnZeroRanking.addEventListener('click', async () => {
+    const btnAdminRanking = document.getElementById('btn-admin-ranking');
+    if (btnAdminRanking) {
+      btnAdminRanking.addEventListener('click', async () => {
         sounds.init();
-        if (confirm('Tem certeza que deseja zerar a pontuação de todos os jogadores no ranking?')) {
-          await this.db.zeroAllRankingScores();
-          this.showRankingModal(this.currentRankingCategory || 'score');
+        const pin = prompt('🔒 ÁREA RESTRITA AO CRIADOR / ADMINISTRADOR\n\nDigite a Senha Mestra de Administrador para gerenciar o ranking:');
+        if (!pin) return;
+
+        if (pin === '9988' || pin === 'admin') {
+          const confirmReset = confirm('👑 Autenticação de Administrador Concluída!\n\nDeseja ZERAR a pontuação de todos os jogadores no ranking agora?');
+          if (confirmReset) {
+            await this.db.zeroAllRankingScores();
+            alert('✅ Sucesso! Todas as pontuações do ranking foram zeradas.');
+            this.showRankingModal(this.currentRankingCategory || 'score');
+          }
+        } else {
+          alert('❌ Senha Mestra incorreta! Acesso negado. Apenas o dono do jogo pode zerar a pontuação.');
+        }
+      });
+    }
+
+    // Atalho secreto: 3 cliques no título do Ranking também solicitam a senha de Admin
+    const rankingTitle = document.querySelector('#ranking-modal .glow-title-small');
+    let titleClicks = 0;
+    let titleTimer = null;
+    if (rankingTitle) {
+      rankingTitle.style.cursor = 'pointer';
+      rankingTitle.addEventListener('click', () => {
+        titleClicks++;
+        clearTimeout(titleTimer);
+        titleTimer = setTimeout(() => { titleClicks = 0; }, 1500);
+        if (titleClicks >= 3) {
+          titleClicks = 0;
+          btnAdminRanking?.click();
         }
       });
     }
