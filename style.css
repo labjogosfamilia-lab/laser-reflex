@@ -1882,3 +1882,54 @@ canvas {
   font-size: 12px;
   color: #8b9bb4;
 }
+
+/* =========================================================================
+   STATUS DO BANCO DE DADOS E GRAVAÇÃO DE PARTIDAS
+   ========================================================================= */
+
+.ranking-db-badge {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  margin: -6px auto 14px auto;
+  display: inline-block;
+  text-align: center;
+}
+
+.ranking-db-badge.cloud {
+  background: rgba(0, 255, 163, 0.12);
+  border: 1px solid rgba(0, 255, 163, 0.4);
+  color: #00ffa3;
+  box-shadow: 0 0 12px rgba(0, 255, 163, 0.2);
+}
+
+.ranking-db-badge.local {
+  background: rgba(255, 230, 0, 0.1);
+  border: 1px solid rgba(255, 230, 0, 0.35);
+  color: #ffe600;
+  box-shadow: 0 0 10px rgba(255, 230, 0, 0.15);
+}
+
+.match-db-badge {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  padding: 6px 14px;
+  border-radius: 6px;
+  margin: 10px auto;
+  display: inline-block;
+  letter-spacing: 0.5px;
+  animation: pulseMatchBadge 2s infinite ease-in-out;
+}
+
+@keyframes pulseMatchBadge {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.02); box-shadow: 0 0 12px rgba(0, 240, 255, 0.4); }
+}
+

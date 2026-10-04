@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Laser Reflex - Sobrevivência Neon</title>
-  <link rel="stylesheet" href="style.css?v=8.0">
+  <link rel="stylesheet" href="style.css?v=9.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -183,8 +183,11 @@
           </div>
         </div>
 
+        <div id="gameover-db-badge" class="match-db-badge">💾 Partida gravada no banco de dados!</div>
+
         <div class="menu-buttons-row">
           <button id="restart-btn" class="glow-btn primary-btn">JOGAR NOVAMENTE</button>
+          <button id="gameover-ranking-btn" class="glow-btn ranking-btn">🏆 RANKING</button>
           <button id="gameover-shop-btn" class="glow-btn shop-btn">🛒 LOJA</button>
         </div>
       </div>
@@ -394,6 +397,8 @@
           </div>
         </div>
 
+        <div id="x1-db-badge" class="match-db-badge">💾 Duelo gravado no banco de dados!</div>
+
         <div class="menu-buttons-row">
           <button id="btn-x1-rematch" class="glow-btn primary-btn">🔄 REVANCHE</button>
           <button id="btn-x1-leave" class="glow-btn back-btn">🏠 MENU PRINCIPAL</button>
@@ -452,6 +457,7 @@
       <div class="overlay-card ranking-card">
         <h2 class="glow-title-small">🏆 RANKING GLOBAL DE PILOTOS</h2>
         <p class="subtitle">OS MAIORES RECORDISTAS DE SOBREVIVÊNCIA E DUELOS</p>
+        <div id="ranking-db-badge" class="ranking-db-badge">💾 Consultando banco de dados...</div>
 
         <div class="ranking-tabs">
           <button id="tab-rank-score" class="ranking-tab-btn active">🚀 MODO SOLO (PONTUAÇÃO)</button>
@@ -466,11 +472,12 @@
         </div>
 
         <div class="ranking-list" id="ranking-list-container">
-          <div class="ranking-loading">Carregando classificação global...</div>
+          <div class="ranking-loading">Carregando classificação do banco de dados...</div>
         </div>
 
         <div class="ranking-footer">
           <button id="btn-refresh-ranking" class="mini-glow-btn">🔄 Atualizar</button>
+          <button id="btn-zero-ranking" class="mini-glow-btn mini-danger-btn" title="Zerar a pontuação de todos os jogadores no ranking">🗑️ Zerar Pontuações</button>
           <button id="btn-close-ranking" class="glow-btn back-btn">← VOLTAR AO JOGO</button>
         </div>
       </div>
@@ -527,9 +534,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <!-- Scripts do Jogo -->
-  <script src="database.js?v=8.0"></script>
+  <script src="database.js?v=9.0"></script>
   <script src="peerjs.min.js"></script>
-  <script src="network.js?v=8.0"></script>
-  <script src="game.js?v=8.0"></script>
+  <script src="network.js?v=9.0"></script>
+  <script src="game.js?v=9.0"></script>
 </body>
 </html>

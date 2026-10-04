@@ -31,6 +31,7 @@ class DatabaseManager {
     this.storageKeyPrefix = 'laser_player_';
     this.sessionKey = 'laser_active_session';
     this.leaderboardLocalKey = 'laser_global_leaderboard_cache';
+    this.lastRankingSource = 'local';
 
     this.onUserChange = null;
 
@@ -41,27 +42,11 @@ class DatabaseManager {
 
   // Zera as pontuações do ranking de todos os jogadores (Local e Nuvem)
   async resetAllRankingScores() {
-    const resetFlag = 'laser_ranking_reset_v8.0';
+    const resetFlag = 'laser_ranking_reset_v9.0';
     if (!localStorage.getItem(resetFlag)) {
       try {
-        console.log('[Database] Zerando pontuações de todos os jogadores no ranking...');
-        // 1. Zera cache local de ranking e remove bots mockados
-        const cachedRaw = localStorage.getItem(this.leaderboardLocalKey);
-        if (cachedRaw) {
-          try {
-            const list = JSON.parse(cachedRaw);
-            if (Array.isArray(list)) {
-              const cleaned = list
-                .filter(p => p.nickname !== 'CYBER_ACE' && p.nickname !== 'NEON_SHADOW' && p.nickname !== 'HYPER_PULSE' && p.nickname !== 'SOLAR_DRONE')
-                .map(p => ({ ...p, highScore: 0 }));
-              localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(cleaned));
-            }
-          } catch (e) {
-            localStorage.removeItem(this.leaderboardLocalKey);
-          }
-        }
-
-        // 2. Zera recorde no localStorage do jogo atual
+        console.log('[Database] Zerando pontuações de todos os jogadores no banco e ranking...');
+        // 1. Zera recorde local no navegador
         localStorage.setItem('laser_reflex_highscore', '0');
         if (this.game) {
           this.game.highScore = 0;
@@ -69,7 +54,7 @@ class DatabaseManager {
           if (this.game.domUserHighScoreDisplay) this.game.domUserHighScoreDisplay.textContent = '0';
         }
 
-        // 3. Zera o highScore de todos os perfis locais salvos
+        // 2. Zera as pontuações em todos os perfis salvos localmente
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           if (key && key.startsWith(this.storageKeyPrefix)) {
@@ -83,43 +68,210 @@ class DatabaseManager {
           }
         }
 
-        // 4. Marca flag de reset concluído
+        // 3. Zera o cache do ranking local e remove bots mockados
+        const cachedRaw = localStorage.getItem(this.leaderboardLocalKey);
+        if (cachedRaw) {
+          try {
+            const list = JSON.parse(cachedRaw);
+            if (Array.isArray(list)) {
+              const cleaned = list
+                .filter(p => !['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(p.nickname))
+                .map(p => ({ ...p, highScore: 0 }));
+              localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(cleaned));
+            }
+          } catch (e) {
+            localStorage.removeItem(this.leaderboardLocalKey);
+          }
+        }
+
+        if (this.currentUser) {
+          this.currentUser.highScore = 0;
+        }
+
         localStorage.setItem(resetFlag, 'true');
+        console.log('[Database] Todas as pontuações locais foram zeradas com sucesso!');
       } catch (err) {
         console.warn('Erro ao zerar scores locais:', err);
       }
     }
 
-    // Se o Firebase estiver ativo, zera também os documentos da coleção ranking e players
+    // Se o Firebase estiver ativo, zera também os documentos das coleções ranking e players
     if (this.isCloudEnabled && this.db) {
       try {
         const rankingDocs = await this.db.collection('ranking').get();
         if (!rankingDocs.empty) {
           const batch = this.db.batch();
           rankingDocs.forEach(doc => {
-            const data = doc.data();
             if (['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(doc.id)) {
               batch.delete(doc.ref);
-            } else if (data.highScore > 0) {
-              batch.update(doc.ref, { highScore: 0 });
+            } else {
+              batch.update(doc.ref, { highScore: 0, updatedAt: Date.now() });
             }
           });
           await batch.commit();
           console.log('[Database] Ranking zerado no Firebase Firestore!');
         }
+
+        const playersDocs = await this.db.collection('players').get();
+        if (!playersDocs.empty) {
+          const batchP = this.db.batch();
+          playersDocs.forEach(doc => {
+            batchP.update(doc.ref, { highScore: 0, updatedAt: Date.now() });
+          });
+          await batchP.commit();
+          console.log('[Database] Pontuações de perfis zeradas no Firebase Firestore!');
+        }
       } catch (e) {
-        // Ignora silenciosamente se o Firestore ainda estiver sendo habilitado no console
+        // Ignora caso o Firestore ainda não esteja ativo no console
       }
     }
   }
 
   // Permite zerar manualmente a qualquer momento se desejado
   async zeroAllRankingScores() {
-    localStorage.removeItem('laser_ranking_reset_v8.0');
+    localStorage.removeItem('laser_ranking_reset_v9.0');
+    localStorage.removeItem(this.leaderboardLocalKey);
     await this.resetAllRankingScores();
     if (this.game && this.game.renderRankingList) {
-      this.game.renderRankingList('score');
+      this.game.renderRankingList(this.game.currentRankingCategory || 'score');
     }
+    return true;
+  }
+
+  // Registra o Login do Jogador no Banco de Dados (Nuvem e Local)
+  async recordLogin(user, type = 'login') {
+    if (!user || !user.nickname) return;
+
+    const now = Date.now();
+    const dateFormatted = new Date().toLocaleString('pt-BR');
+    const isoDate = new Date().toISOString();
+
+    user.lastLogin = now;
+    user.lastLoginFormatted = dateFormatted;
+    user.loginCount = (user.loginCount || 0) + 1;
+
+    // 1. Atualiza no Perfil Local (LocalStorage)
+    try {
+      localStorage.setItem(this.storageKeyPrefix + user.nickname, JSON.stringify(user));
+    } catch (e) {}
+
+    // 2. Registra no Firebase Firestore (Nuvem)
+    if (this.isCloudEnabled && this.db) {
+      try {
+        const userRef = this.db.collection('players').doc(user.nickname);
+        await userRef.set({
+          lastLogin: now,
+          lastLoginFormatted: dateFormatted,
+          loginCount: user.loginCount,
+          lastLoginType: type,
+          updatedAt: now
+        }, { merge: true });
+
+        // Adiciona registro na coleção dedicada de histórico de logins
+        await this.db.collection('logins').add({
+          nickname: user.nickname,
+          type: type,
+          timestamp: now,
+          date: dateFormatted,
+          isoDate: isoDate,
+          userAgent: (navigator.userAgent || '').slice(0, 150)
+        });
+
+        console.log(`[Database] Login de ${user.nickname} (${type}) registrado com sucesso no banco de dados!`);
+      } catch (err) {
+        console.warn('[Database] Não foi possível registrar login na nuvem (Firestore em standby):', err.message);
+      }
+    }
+  }
+
+  // Registra o Resultado da Partida no Banco de Dados e Atualiza o Ranking
+  async recordMatchResult(matchData) {
+    const now = Date.now();
+    const dateFormatted = new Date().toLocaleString('pt-BR');
+    const user = this.currentUser;
+    const nickname = user ? user.nickname : (localStorage.getItem('laser_guest_nickname') || 'PILOTO_ANONIMO');
+
+    const matchEntry = {
+      nickname: nickname,
+      isRegistered: !!user,
+      mode: matchData.mode || 'solo',
+      score: Math.floor(matchData.score || 0),
+      level: matchData.level || 1,
+      survivalTime: matchData.survivalTime || 0,
+      isWinner: !!matchData.isWinner,
+      creditsEarned: matchData.creditsEarned || 0,
+      timestamp: now,
+      date: dateFormatted
+    };
+
+    console.log(`[Database] Gravando resultado da partida no banco de dados para ${nickname}:`, matchEntry);
+
+    // 1. Grava o resultado na coleção 'matches' (Histórico Geral de Partidas no Firebase)
+    if (this.isCloudEnabled && this.db) {
+      try {
+        await this.db.collection('matches').add(matchEntry);
+        console.log('[Database] Partida registrada na coleção "matches" do Firebase!');
+      } catch (e) {
+        console.warn('[Database] Erro ao gravar partida no Firebase:', e.message);
+      }
+    }
+
+    // 2. Se o jogador tiver conta criada, atualiza os dados do piloto e o ranking
+    if (user) {
+      user.matchesPlayed = (user.matchesPlayed || 0) + 1;
+
+      if (matchData.mode === 'solo') {
+        const matchScore = Math.floor(matchData.score || 0);
+        if (matchScore > (user.highScore || 0)) {
+          user.highScore = matchScore;
+        }
+        if ((matchData.level || 1) > (user.maxLevel || 1)) {
+          user.maxLevel = matchData.level;
+        }
+      } else if (matchData.mode === 'x1' && matchData.isWinner) {
+        user.x1Wins = (user.x1Wins || 0) + 1;
+      }
+
+      if (this.game && this.game.credits !== undefined) {
+        user.credits = this.game.credits;
+      }
+      user.updatedAt = now;
+
+      // Salva no perfil do jogador (Local e Nuvem)
+      try {
+        localStorage.setItem(this.storageKeyPrefix + user.nickname, JSON.stringify(user));
+      } catch (e) {}
+
+      if (this.isCloudEnabled && this.db) {
+        try {
+          await this.db.collection('players').doc(user.nickname).set({
+            highScore: user.highScore || 0,
+            maxLevel: user.maxLevel || 1,
+            x1Wins: user.x1Wins || 0,
+            matchesPlayed: user.matchesPlayed || 0,
+            credits: user.credits || 0,
+            lastMatchAt: now,
+            lastMatchDate: dateFormatted,
+            updatedAt: now
+          }, { merge: true });
+        } catch (e) {
+          console.warn('[Database] Erro ao atualizar jogador após partida no Firebase:', e.message);
+        }
+      }
+
+      // 3. Atualiza o Ranking no Banco de Dados para refletir a nova pontuação
+      await this.syncToLeaderboard(user);
+
+      if (this.onUserChange) this.onUserChange(user);
+    } else {
+      // Piloto anônimo jogando solo
+      if (matchData.mode === 'solo' && matchData.score > (this.game.highScore || 0)) {
+        this.game.highScore = matchData.score;
+        localStorage.setItem('laser_reflex_highscore', this.game.highScore);
+      }
+    }
+
+    return matchEntry;
   }
 
   // Inicializa o Firebase se a biblioteca e credenciais estiverem disponíveis
@@ -205,6 +357,7 @@ class DatabaseManager {
 
         await userRef.set(newPlayer);
         await this.syncToLeaderboard(newPlayer);
+        await this.recordLogin(newPlayer, 'register');
 
         this.setCurrentUser(newPlayer);
         return newPlayer;
@@ -236,6 +389,7 @@ class DatabaseManager {
 
     localStorage.setItem(this.storageKeyPrefix + nickname, JSON.stringify(newPlayer));
     this.updateLocalLeaderboard(newPlayer);
+    await this.recordLogin(newPlayer, 'register');
     this.setCurrentUser(newPlayer);
     return newPlayer;
   }
@@ -262,8 +416,7 @@ class DatabaseManager {
           if (userData.pinHash !== pinHash) {
             throw new Error('Senha/PIN incorreto para este jogador!');
           }
-          userData.lastLogin = Date.now();
-          await userRef.update({ lastLogin: userData.lastLogin });
+          await this.recordLogin(userData, 'login');
 
           this.setCurrentUser(userData);
           this.applyUserDataToGame(userData);
@@ -290,8 +443,7 @@ class DatabaseManager {
       throw new Error('Senha/PIN incorreto para este jogador!');
     }
 
-    userData.lastLogin = Date.now();
-    localStorage.setItem(this.storageKeyPrefix + nickname, JSON.stringify(userData));
+    await this.recordLogin(userData, 'login');
 
     this.setCurrentUser(userData);
     this.applyUserDataToGame(userData);
@@ -334,6 +486,7 @@ class DatabaseManager {
         if (user.pinHash === session.pinHash) {
           this.setCurrentUser(user);
           this.applyUserDataToGame(user);
+          this.recordLogin(user, 'session_restore');
         }
       }
 
@@ -345,6 +498,7 @@ class DatabaseManager {
           if (user.pinHash === session.pinHash) {
             this.setCurrentUser(user);
             this.applyUserDataToGame(user);
+            this.recordLogin(user, 'session_restore');
           }
         }
       }
@@ -481,12 +635,13 @@ class DatabaseManager {
     return [];
   }
 
-  // Obter o Ranking Público Global ordenado por Categoria
+  // Obter o Ranking Público Global ordenado por Categoria diretamente do Banco de Dados
   async getRanking(category = 'score') {
-    // 1. Tenta buscar do Firebase
+    const orderField = (category === 'x1') ? 'x1Wins' : 'highScore';
+
+    // 1. Tenta buscar DIRETAMENTE do Firebase Firestore (Banco de Dados em Nuvem)
     if (this.isCloudEnabled && this.db) {
       try {
-        const orderField = (category === 'x1') ? 'x1Wins' : 'highScore';
         const snapshot = await this.db.collection('ranking')
           .orderBy(orderField, 'desc')
           .limit(30)
@@ -494,18 +649,23 @@ class DatabaseManager {
 
         const rankingList = [];
         snapshot.forEach(doc => {
-          rankingList.push(doc.data());
+          const data = doc.data();
+          if (!['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(data.nickname)) {
+            rankingList.push(data);
+          }
         });
 
-        if (rankingList.length > 0) {
-          return rankingList;
-        }
+        // O ranking reflete fielmente os dados cadastrados no banco
+        console.log(`[Database] Ranking carregado diretamente do Firestore (${rankingList.length} pilotos).`);
+        this.lastRankingSource = 'cloud';
+        return rankingList;
       } catch (err) {
-        console.warn('Erro ao buscar ranking do Firebase, exibindo cache local:', err);
+        console.warn('[Database] Firestore em nuvem inacessível, exibindo banco local:', err.message);
       }
     }
 
-    // 2. Fallback do cache local
+    // 2. Fallback do Banco Local
+    this.lastRankingSource = 'local';
     const localList = this.getLocalLeaderboard();
     const sortField = (category === 'x1') ? 'x1Wins' : 'highScore';
     localList.sort((a, b) => (b[sortField] || 0) - (a[sortField] || 0));

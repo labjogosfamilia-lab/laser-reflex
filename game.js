@@ -1917,6 +1917,25 @@ class Game {
       });
     }
 
+    const btnZeroRanking = document.getElementById('btn-zero-ranking');
+    if (btnZeroRanking) {
+      btnZeroRanking.addEventListener('click', async () => {
+        sounds.init();
+        if (confirm('Tem certeza que deseja zerar a pontuação de todos os jogadores no ranking?')) {
+          await this.db.zeroAllRankingScores();
+          this.showRankingModal(this.currentRankingCategory || 'score');
+        }
+      });
+    }
+
+    const btnGameOverRanking = document.getElementById('gameover-ranking-btn');
+    if (btnGameOverRanking) {
+      btnGameOverRanking.addEventListener('click', () => {
+        sounds.init();
+        this.showRankingModal('score');
+      });
+    }
+
     if (btnCloseRanking) {
       btnCloseRanking.addEventListener('click', () => {
         if (this.domRankingModal) this.domRankingModal.classList.add('hidden');
@@ -1985,15 +2004,29 @@ class Game {
     }
 
     if (listContainer) {
-      listContainer.innerHTML = '<div class="ranking-loading">Carregando classificação global...</div>';
+      listContainer.innerHTML = '<div class="ranking-loading">Consultando banco de dados em tempo real...</div>';
     }
+
+    const dbBadge = document.getElementById('ranking-db-badge');
 
     try {
       const list = await this.db.getRanking(category);
+
+      // Atualiza badge de status da fonte do banco
+      if (dbBadge && this.db) {
+        if (this.db.lastRankingSource === 'cloud') {
+          dbBadge.className = 'ranking-db-badge cloud';
+          dbBadge.innerHTML = '🟢 <strong>Banco de Dados: Firestore Nuvem</strong> (Conectado)';
+        } else {
+          dbBadge.className = 'ranking-db-badge local';
+          dbBadge.innerHTML = '🟡 <strong>Banco de Dados: Local</strong> (Standby - dados salvos no navegador)';
+        }
+      }
+
       if (!listContainer) return;
 
       if (!list || list.length === 0) {
-        listContainer.innerHTML = '<div class="ranking-empty">Nenhum piloto registrado ainda. Crie sua conta e seja o primeiro!</div>';
+        listContainer.innerHTML = '<div class="ranking-empty">Nenhum piloto registrado ainda no banco de dados. Jogue uma partida ou crie sua conta para inaugurar o ranking!</div>';
         return;
       }
 
@@ -2031,7 +2064,7 @@ class Game {
       listContainer.innerHTML = html;
     } catch (e) {
       if (listContainer) {
-        listContainer.innerHTML = '<div class="ranking-empty">Erro ao carregar o ranking. Tente novamente mais tarde.</div>';
+        listContainer.innerHTML = '<div class="ranking-empty">Erro ao carregar o ranking do banco de dados. Tente novamente mais tarde.</div>';
       }
     }
   }
@@ -2479,12 +2512,23 @@ class Game {
       this.addCredits(25);
     }
 
+    const earnedCredits = isWinner ? 80 : 25;
     if (this.db) {
-      this.db.saveProgress({
-        x1Wins: this.x1Wins,
-        credits: this.credits,
-        matchesPlayed: (this.db.currentUser?.matchesPlayed || 0) + 1
+      this.db.recordMatchResult({
+        mode: 'x1',
+        isWinner: isWinner,
+        survivalTime: parseFloat(this.x1MatchTime.toFixed(1)),
+        creditsEarned: earnedCredits
       });
+    }
+
+    const x1DbBadge = document.getElementById('x1-db-badge');
+    if (x1DbBadge) {
+      if (this.db && this.db.currentUser) {
+        x1DbBadge.textContent = `💾 Duelo gravado no perfil de ${this.db.currentUser.nickname}!`;
+      } else {
+        x1DbBadge.textContent = '💾 Resultado do duelo gravado no banco de dados!';
+      }
     }
 
     if (this.domX1StatTime) this.domX1StatTime.textContent = `${this.x1MatchTime.toFixed(1)}s`;
@@ -2957,21 +3001,32 @@ class Game {
       this.domPlayerCredits.textContent = this.credits;
     }
 
-    if (this.score > this.highScore) {
-      this.highScore = Math.floor(this.score);
+    const finalScoreVal = Math.floor(this.score);
+    if (finalScoreVal > this.highScore) {
+      this.highScore = finalScoreVal;
       localStorage.setItem('laser_reflex_highscore', this.highScore);
     }
 
     if (this.db) {
-      this.db.saveProgress({
-        highScore: this.highScore,
-        maxLevel: Math.max(this.db.currentUser?.maxLevel || 1, this.level),
-        credits: this.credits,
-        matchesPlayed: (this.db.currentUser?.matchesPlayed || 0) + 1
+      this.db.recordMatchResult({
+        mode: 'solo',
+        score: finalScoreVal,
+        level: this.level,
+        survivalTime: parseFloat(this.survivalTime.toFixed(1)),
+        creditsEarned: matchBonus
       });
     }
 
-    this.domFinalScore.textContent = Math.floor(this.score);
+    const goDbBadge = document.getElementById('gameover-db-badge');
+    if (goDbBadge) {
+      if (this.db && this.db.currentUser) {
+        goDbBadge.textContent = `💾 Partida registrada no perfil de ${this.db.currentUser.nickname}!`;
+      } else {
+        goDbBadge.textContent = '💾 Partida gravada! Crie uma conta no menu para disputar o ranking.';
+      }
+    }
+
+    this.domFinalScore.textContent = finalScoreVal;
     if (this.domFinalLevel) this.domFinalLevel.textContent = this.level;
     this.domFinalTime.textContent = `${this.survivalTime.toFixed(1)}s`;
     this.domHighScore.textContent = this.highScore;
