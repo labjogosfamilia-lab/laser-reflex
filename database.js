@@ -35,7 +35,91 @@ class DatabaseManager {
     this.onUserChange = null;
 
     this.initFirebase();
+    this.resetAllRankingScores();
     this.restoreSession();
+  }
+
+  // Zera as pontuações do ranking de todos os jogadores (Local e Nuvem)
+  async resetAllRankingScores() {
+    const resetFlag = 'laser_ranking_reset_v8.0';
+    if (!localStorage.getItem(resetFlag)) {
+      try {
+        console.log('[Database] Zerando pontuações de todos os jogadores no ranking...');
+        // 1. Zera cache local de ranking e remove bots mockados
+        const cachedRaw = localStorage.getItem(this.leaderboardLocalKey);
+        if (cachedRaw) {
+          try {
+            const list = JSON.parse(cachedRaw);
+            if (Array.isArray(list)) {
+              const cleaned = list
+                .filter(p => p.nickname !== 'CYBER_ACE' && p.nickname !== 'NEON_SHADOW' && p.nickname !== 'HYPER_PULSE' && p.nickname !== 'SOLAR_DRONE')
+                .map(p => ({ ...p, highScore: 0 }));
+              localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(cleaned));
+            }
+          } catch (e) {
+            localStorage.removeItem(this.leaderboardLocalKey);
+          }
+        }
+
+        // 2. Zera recorde no localStorage do jogo atual
+        localStorage.setItem('laser_reflex_highscore', '0');
+        if (this.game) {
+          this.game.highScore = 0;
+          if (this.game.domHighScore) this.game.domHighScore.textContent = '0';
+          if (this.game.domUserHighScoreDisplay) this.game.domUserHighScoreDisplay.textContent = '0';
+        }
+
+        // 3. Zera o highScore de todos os perfis locais salvos
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(this.storageKeyPrefix)) {
+            try {
+              const uData = JSON.parse(localStorage.getItem(key));
+              if (uData) {
+                uData.highScore = 0;
+                localStorage.setItem(key, JSON.stringify(uData));
+              }
+            } catch (e) {}
+          }
+        }
+
+        // 4. Marca flag de reset concluído
+        localStorage.setItem(resetFlag, 'true');
+      } catch (err) {
+        console.warn('Erro ao zerar scores locais:', err);
+      }
+    }
+
+    // Se o Firebase estiver ativo, zera também os documentos da coleção ranking e players
+    if (this.isCloudEnabled && this.db) {
+      try {
+        const rankingDocs = await this.db.collection('ranking').get();
+        if (!rankingDocs.empty) {
+          const batch = this.db.batch();
+          rankingDocs.forEach(doc => {
+            const data = doc.data();
+            if (['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(doc.id)) {
+              batch.delete(doc.ref);
+            } else if (data.highScore > 0) {
+              batch.update(doc.ref, { highScore: 0 });
+            }
+          });
+          await batch.commit();
+          console.log('[Database] Ranking zerado no Firebase Firestore!');
+        }
+      } catch (e) {
+        // Ignora silenciosamente se o Firestore ainda estiver sendo habilitado no console
+      }
+    }
+  }
+
+  // Permite zerar manualmente a qualquer momento se desejado
+  async zeroAllRankingScores() {
+    localStorage.removeItem('laser_ranking_reset_v8.0');
+    await this.resetAllRankingScores();
+    if (this.game && this.game.renderRankingList) {
+      this.game.renderRankingList('score');
+    }
   }
 
   // Inicializa o Firebase se a biblioteca e credenciais estiverem disponíveis
@@ -383,16 +467,18 @@ class DatabaseManager {
   getLocalLeaderboard() {
     try {
       const data = localStorage.getItem(this.leaderboardLocalKey);
-      if (data) return JSON.parse(data);
+      if (data) {
+        const parsed = JSON.parse(data);
+        // Filtra para remover qualquer jogador de teste antigo (como CYBER_ACE, NEON_SHADOW)
+        const clean = Array.isArray(parsed) ? parsed.filter(p => p.nickname !== 'CYBER_ACE' && p.nickname !== 'NEON_SHADOW' && p.nickname !== 'HYPER_PULSE' && p.nickname !== 'SOLAR_DRONE') : [];
+        if (clean.length !== parsed.length) {
+          localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(clean));
+        }
+        return clean;
+      }
     } catch (e) {}
 
-    // Mock inicial caso esteja vazio
-    return [
-      { nickname: 'CYBER_ACE', highScore: 12500, maxLevel: 5, x1Wins: 14 },
-      { nickname: 'NEON_SHADOW', highScore: 9800, maxLevel: 4, x1Wins: 9 },
-      { nickname: 'HYPER_PULSE', highScore: 6400, maxLevel: 3, x1Wins: 5 },
-      { nickname: 'SOLAR_DRONE', highScore: 4100, maxLevel: 2, x1Wins: 2 }
-    ];
+    return [];
   }
 
   // Obter o Ranking Público Global ordenado por Categoria
