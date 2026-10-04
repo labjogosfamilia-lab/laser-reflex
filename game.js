@@ -2042,7 +2042,12 @@ class Game {
       if (dbBadge && this.db) {
         if (this.db.lastRankingSource === 'cloud') {
           dbBadge.className = 'ranking-db-badge cloud';
-          dbBadge.innerHTML = '🟢 <strong>Banco de Dados: Firestore Nuvem</strong> (Conectado)';
+          dbBadge.innerHTML = '🟢 <strong>Banco de Dados: Firestore Nuvem</strong> (Conectado em Tempo Real)';
+        } else if (this.db.lastRankingSource === 'cloud_disabled') {
+          dbBadge.className = 'ranking-db-badge cloud-disabled';
+          dbBadge.innerHTML = '⚠️ <strong>Banco Nuvem: Criação Pendente no Firebase Console</strong> (Exibindo Banco Local)<br>' +
+            '<span style="font-size:0.75rem; opacity:0.9;">Para sincronizar com outros aparelhos, conclua a ativação do Firestore:</span><br>' +
+            '<a href="https://console.firebase.google.com/project/lazer-reflex/firestore" target="_blank" class="btn-activate-cloud-link">👉 Clique aqui para Criar o Banco Firestore no Console</a>';
         } else {
           dbBadge.className = 'ranking-db-badge local';
           dbBadge.innerHTML = '🟡 <strong>Banco de Dados: Local</strong> (Standby - dados salvos no navegador)';
@@ -2057,6 +2062,8 @@ class Game {
       }
 
       let html = '';
+      const currentNick = this.db.currentUser ? this.db.currentUser.nickname : (this.db.getGuestNickname ? this.db.getGuestNickname() : '');
+
       list.forEach((item, index) => {
         const rank = index + 1;
         let medal = `#${rank}`;
@@ -2072,7 +2079,7 @@ class Game {
           rowClass += ' top-3';
         }
 
-        const isMe = this.db.currentUser && this.db.currentUser.nickname === item.nickname;
+        const isMe = currentNick && (currentNick === item.nickname);
         if (isMe) rowClass += ' current-player';
 
         const statVal = (category === 'x1') ? (item.x1Wins || 0) : (item.highScore || 0);
@@ -3046,9 +3053,10 @@ class Game {
     const goDbBadge = document.getElementById('gameover-db-badge');
     if (goDbBadge) {
       if (this.db && this.db.currentUser) {
-        goDbBadge.textContent = `💾 Partida registrada no perfil de ${this.db.currentUser.nickname}!`;
+        goDbBadge.textContent = `💾 Partida registrada no perfil de ${this.db.currentUser.nickname}! Pontuação salva no Ranking.`;
       } else {
-        goDbBadge.textContent = '💾 Partida gravada! Crie uma conta no menu para disputar o ranking.';
+        const guestNick = this.db && this.db.getGuestNickname ? this.db.getGuestNickname() : 'PILOTO';
+        goDbBadge.textContent = `💾 Partida registrada no Ranking como ${guestNick}! (Crie uma conta para salvar seu nome oficial)`;
       }
     }
 

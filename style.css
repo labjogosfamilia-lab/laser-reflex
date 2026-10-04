@@ -1913,6 +1913,35 @@ canvas {
   box-shadow: 0 0 10px rgba(255, 230, 0, 0.15);
 }
 
+.ranking-db-badge.cloud-disabled {
+  background: rgba(255, 140, 0, 0.12);
+  border: 1px solid rgba(255, 140, 0, 0.45);
+  color: #ffaa00;
+  box-shadow: 0 0 12px rgba(255, 140, 0, 0.2);
+  line-height: 1.5;
+  padding: 8px 16px;
+  max-width: 92%;
+}
+
+.btn-activate-cloud-link {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 12px;
+  background: #ffaa00;
+  color: #0b0f19;
+  font-weight: 800;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+}
+
+.btn-activate-cloud-link:hover {
+  background: #ffd000;
+  transform: scale(1.04);
+}
+
 .match-db-badge {
   font-family: 'Rajdhani', sans-serif;
   font-size: 13px;

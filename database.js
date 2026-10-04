@@ -38,6 +38,43 @@ class DatabaseManager {
     this.initFirebase();
     this.resetAllRankingScores();
     this.restoreSession();
+    this.ensureCurrentPlayerInLeaderboard();
+  }
+
+  // Gera ou recupera apelido persistente para convidados (jogadores sem conta criada)
+  getGuestNickname() {
+    let nick = localStorage.getItem('laser_guest_nickname');
+    if (!nick) {
+      nick = 'PILOTO_' + Math.floor(1000 + Math.random() * 9000);
+      localStorage.setItem('laser_guest_nickname', nick);
+    }
+    return nick;
+  }
+
+  // Garante que o piloto atual (com conta ou convidado) tenha seu recorde salvo no ranking local
+  ensureCurrentPlayerInLeaderboard() {
+    try {
+      if (this.currentUser) {
+        if ((this.currentUser.highScore || 0) > 0 || (this.currentUser.x1Wins || 0) > 0) {
+          this.updateLocalLeaderboard(this.currentUser);
+        }
+      } else {
+        const localHs = parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10);
+        const guestHs = parseInt(localStorage.getItem('laser_guest_highscore') || '0', 10);
+        const bestHs = Math.max(localHs, guestHs);
+        if (bestHs > 0) {
+          const guestNick = this.getGuestNickname();
+          this.updateLocalLeaderboard({
+            nickname: guestNick,
+            highScore: bestHs,
+            maxLevel: parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10),
+            x1Wins: parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10),
+            equippedSkin: (this.game && this.game.equippedSkin) || localStorage.getItem('laser_reflex_skin') || 'cyan',
+            updatedAt: Date.now()
+          });
+        }
+      }
+    } catch (e) {}
   }
 
   // Zera as pontuações do ranking de todos os jogadores (Local e Nuvem)
@@ -189,14 +226,16 @@ class DatabaseManager {
     const now = Date.now();
     const dateFormatted = new Date().toLocaleString('pt-BR');
     const user = this.currentUser;
-    const nickname = user ? user.nickname : (localStorage.getItem('laser_guest_nickname') || 'PILOTO_ANONIMO');
+    const matchScore = Math.floor(matchData.score || 0);
+    const matchLevel = Math.max(1, Math.floor(matchData.level || 1));
+    const nickname = user ? user.nickname : this.getGuestNickname();
 
     const matchEntry = {
       nickname: nickname,
       isRegistered: !!user,
       mode: matchData.mode || 'solo',
-      score: Math.floor(matchData.score || 0),
-      level: matchData.level || 1,
+      score: matchScore,
+      level: matchLevel,
       survivalTime: matchData.survivalTime || 0,
       isWinner: !!matchData.isWinner,
       creditsEarned: matchData.creditsEarned || 0,
@@ -204,29 +243,19 @@ class DatabaseManager {
       date: dateFormatted
     };
 
-    console.log(`[Database] Gravando resultado da partida no banco de dados para ${nickname}:`, matchEntry);
+    console.log(`[Database] Gravando resultado da partida para ${nickname}:`, matchEntry);
 
-    // 1. Grava o resultado na coleção 'matches' (Histórico Geral de Partidas no Firebase)
-    if (this.isCloudEnabled && this.db) {
-      try {
-        await this.db.collection('matches').add(matchEntry);
-        console.log('[Database] Partida registrada na coleção "matches" do Firebase!');
-      } catch (e) {
-        console.warn('[Database] Erro ao gravar partida no Firebase:', e.message);
-      }
-    }
+    let rankingEntry = null;
 
-    // 2. Se o jogador tiver conta criada, atualiza os dados do piloto e o ranking
     if (user) {
       user.matchesPlayed = (user.matchesPlayed || 0) + 1;
 
       if (matchData.mode === 'solo') {
-        const matchScore = Math.floor(matchData.score || 0);
         if (matchScore > (user.highScore || 0)) {
           user.highScore = matchScore;
         }
-        if ((matchData.level || 1) > (user.maxLevel || 1)) {
-          user.maxLevel = matchData.level;
+        if (matchLevel > (user.maxLevel || 1)) {
+          user.maxLevel = matchLevel;
         }
       } else if (matchData.mode === 'x1' && matchData.isWinner) {
         user.x1Wins = (user.x1Wins || 0) + 1;
@@ -237,12 +266,70 @@ class DatabaseManager {
       }
       user.updatedAt = now;
 
-      // Salva no perfil do jogador (Local e Nuvem)
       try {
         localStorage.setItem(this.storageKeyPrefix + user.nickname, JSON.stringify(user));
       } catch (e) {}
 
-      if (this.isCloudEnabled && this.db) {
+      rankingEntry = {
+        nickname: user.nickname,
+        highScore: user.highScore || 0,
+        maxLevel: user.maxLevel || 1,
+        x1Wins: user.x1Wins || 0,
+        equippedSkin: user.equippedSkin || 'cyan',
+        updatedAt: now
+      };
+    } else {
+      // Piloto Convidado (jogando sem cadastro inicial)
+      let guestScore = parseInt(localStorage.getItem('laser_guest_highscore') || '0', 10);
+      let guestLevel = parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10);
+      let guestX1Wins = parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10);
+
+      if (matchData.mode === 'solo') {
+        if (matchScore > guestScore) {
+          guestScore = matchScore;
+          localStorage.setItem('laser_guest_highscore', guestScore);
+        }
+        if (matchLevel > guestLevel) {
+          guestLevel = matchLevel;
+          localStorage.setItem('laser_guest_maxlevel', guestLevel);
+        }
+        if (matchScore > (this.game.highScore || 0)) {
+          this.game.highScore = matchScore;
+          localStorage.setItem('laser_reflex_highscore', this.game.highScore);
+        }
+      } else if (matchData.mode === 'x1' && matchData.isWinner) {
+        guestX1Wins += 1;
+        localStorage.setItem('laser_guest_x1wins', guestX1Wins);
+      }
+
+      rankingEntry = {
+        nickname: nickname,
+        highScore: Math.max(guestScore, matchScore),
+        maxLevel: Math.max(guestLevel, matchLevel),
+        x1Wins: guestX1Wins,
+        equippedSkin: (this.game && this.game.equippedSkin) || localStorage.getItem('laser_reflex_skin') || 'cyan',
+        updatedAt: now
+      };
+    }
+
+    // 1. Atualização SÍNCRONA e IMEDIATA do ranking local (garante exibição sem depender de rede)
+    if (rankingEntry) {
+      this.updateLocalLeaderboard(rankingEntry);
+    }
+
+    if (this.onUserChange && user) {
+      this.onUserChange(user);
+    }
+
+    // 2. Gravação no Firebase Firestore (Nuvem) em background
+    if (this.isCloudEnabled && this.db) {
+      try {
+        await this.db.collection('matches').add(matchEntry);
+      } catch (e) {
+        console.warn('[Database] Firestore matches pendente:', e.message);
+      }
+
+      if (user) {
         try {
           await this.db.collection('players').doc(user.nickname).set({
             highScore: user.highScore || 0,
@@ -255,19 +342,16 @@ class DatabaseManager {
             updatedAt: now
           }, { merge: true });
         } catch (e) {
-          console.warn('[Database] Erro ao atualizar jogador após partida no Firebase:', e.message);
+          console.warn('[Database] Firestore player pendente:', e.message);
         }
       }
 
-      // 3. Atualiza o Ranking no Banco de Dados para refletir a nova pontuação
-      await this.syncToLeaderboard(user);
-
-      if (this.onUserChange) this.onUserChange(user);
-    } else {
-      // Piloto anônimo jogando solo
-      if (matchData.mode === 'solo' && matchData.score > (this.game.highScore || 0)) {
-        this.game.highScore = matchData.score;
-        localStorage.setItem('laser_reflex_highscore', this.game.highScore);
+      if (rankingEntry) {
+        try {
+          await this.syncToLeaderboard(rankingEntry);
+        } catch (e) {
+          console.warn('[Database] Firestore ranking sync pendente:', e.message);
+        }
       }
     }
 
@@ -332,6 +416,35 @@ class DatabaseManager {
 
     const pinHash = await this.hashPin(pin);
 
+    // Herda pontuação e conquistas obtidas como convidado
+    const inheritedScore = Math.max(
+      this.game.highScore || 0,
+      parseInt(localStorage.getItem('laser_guest_highscore') || '0', 10),
+      parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10)
+    );
+    const inheritedLevel = Math.max(
+      this.game.level || 1,
+      parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10)
+    );
+    const inheritedX1 = Math.max(
+      this.game.x1Wins || 0,
+      parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10)
+    );
+
+    const newPlayer = {
+      nickname: nickname,
+      pinHash: pinHash,
+      highScore: inheritedScore,
+      maxLevel: inheritedLevel,
+      credits: this.game.credits || 0,
+      x1Wins: inheritedX1,
+      matchesPlayed: parseInt(localStorage.getItem('laser_guest_matches') || '0', 10),
+      unlockedSkins: this.game.ownedSkins || ['cyan'],
+      equippedSkin: this.game.equippedSkin || 'cyan',
+      createdAt: Date.now(),
+      lastLogin: Date.now()
+    };
+
     // 1. Tenta verificar e salvar no Firebase se ativo
     if (this.isCloudEnabled && this.db) {
       try {
@@ -341,55 +454,35 @@ class DatabaseManager {
           throw new Error('Este apelido já está em uso! Escolha outro.');
         }
 
-        const newPlayer = {
-          nickname: nickname,
-          pinHash: pinHash,
-          highScore: this.game.highScore || 0,
-          maxLevel: this.game.level || 1,
-          credits: this.game.credits || 0,
-          x1Wins: this.game.x1Wins || 0,
-          matchesPlayed: 0,
-          unlockedSkins: this.game.ownedSkins || ['cyan'],
-          equippedSkin: this.game.equippedSkin || 'cyan',
-          createdAt: Date.now(),
-          lastLogin: Date.now()
-        };
-
         await userRef.set(newPlayer);
         await this.syncToLeaderboard(newPlayer);
         await this.recordLogin(newPlayer, 'register');
-
-        this.setCurrentUser(newPlayer);
-        return newPlayer;
       } catch (err) {
         if (err.message.includes('já está em uso')) throw err;
-        console.warn('Erro ao salvar no Firebase, registrando localmente:', err);
+        console.warn('Firebase em standby ou inacessível, registrando jogador localmente:', err.message);
       }
     }
 
-    // 2. Registro Local (armazenamento persistente do navegador)
+    // 2. Registro Local Persistente (Garantia imediata em qualquer cenário)
     const localExisting = localStorage.getItem(this.storageKeyPrefix + nickname);
     if (localExisting) {
       throw new Error('Este apelido já está em uso neste dispositivo! Escolha outro.');
     }
 
-    const newPlayer = {
-      nickname: nickname,
-      pinHash: pinHash,
-      highScore: this.game.highScore || 0,
-      maxLevel: this.game.level || 1,
-      credits: this.game.credits || 0,
-      x1Wins: this.game.x1Wins || 0,
-      matchesPlayed: 0,
-      unlockedSkins: this.game.ownedSkins || ['cyan'],
-      equippedSkin: this.game.equippedSkin || 'cyan',
-      createdAt: Date.now(),
-      lastLogin: Date.now()
-    };
-
     localStorage.setItem(this.storageKeyPrefix + nickname, JSON.stringify(newPlayer));
     this.updateLocalLeaderboard(newPlayer);
     await this.recordLogin(newPlayer, 'register');
+
+    // Remove convidado temporário do ranking para dar lugar ao nome oficial
+    const guestNick = localStorage.getItem('laser_guest_nickname');
+    if (guestNick) {
+      try {
+        let list = this.getLocalLeaderboard();
+        list = list.filter(p => p.nickname !== guestNick);
+        localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(list));
+      } catch (e) {}
+    }
+
     this.setCurrentUser(newPlayer);
     return newPlayer;
   }
@@ -416,16 +509,27 @@ class DatabaseManager {
           if (userData.pinHash !== pinHash) {
             throw new Error('Senha/PIN incorreto para este jogador!');
           }
+
+          // Salva cópia local para uso offline
+          try {
+            localStorage.setItem(this.storageKeyPrefix + userData.nickname, JSON.stringify(userData));
+            this.updateLocalLeaderboard(userData);
+          } catch(e) {}
+
           await this.recordLogin(userData, 'login');
 
           this.setCurrentUser(userData);
           this.applyUserDataToGame(userData);
           return userData;
         } else {
-          throw new Error('Jogador não encontrado com este apelido.');
+          // Se não encontrou na nuvem, verifica se existe localmente antes de erro definitivo
+          const localCheck = localStorage.getItem(this.storageKeyPrefix + nickname);
+          if (!localCheck) {
+            throw new Error('Jogador não encontrado com este apelido.');
+          }
         }
       } catch (err) {
-        if (err.message.includes('Senha/PIN') || err.message.includes('não encontrado')) {
+        if (err.message.includes('Senha/PIN') || (err.message.includes('não encontrado') && !localStorage.getItem(this.storageKeyPrefix + nickname))) {
           throw err;
         }
         console.warn('Erro ao autenticar no Firebase, verificando local:', err);
@@ -443,6 +547,7 @@ class DatabaseManager {
       throw new Error('Senha/PIN incorreto para este jogador!');
     }
 
+    this.updateLocalLeaderboard(userData);
     await this.recordLogin(userData, 'login');
 
     this.setCurrentUser(userData);
@@ -579,60 +684,140 @@ class DatabaseManager {
 
   // Sincroniza dados com a coleção pública de Ranking no Firebase
   async syncToLeaderboard(player) {
-    if (!this.isCloudEnabled || !this.db || !player || !player.nickname) return;
+    if (!player || !player.nickname) return;
+    // Sempre garante que o cache local esteja atualizado primeiro
+    this.updateLocalLeaderboard(player);
+
+    if (!this.isCloudEnabled || !this.db) return;
     try {
       await this.db.collection('ranking').doc(player.nickname).set({
         nickname: player.nickname,
-        highScore: player.highScore || 0,
-        maxLevel: player.maxLevel || 1,
-        x1Wins: player.x1Wins || 0,
-        equippedSkin: player.equippedSkin || 'default',
-        updatedAt: Date.now()
+        highScore: Math.floor(player.highScore || 0),
+        maxLevel: Math.max(1, Math.floor(player.maxLevel || 1)),
+        x1Wins: Math.floor(player.x1Wins || 0),
+        equippedSkin: player.equippedSkin || 'cyan',
+        updatedAt: player.updatedAt || Date.now()
       }, { merge: true });
     } catch (e) {
-      console.warn('Erro ao atualizar ranking no Firebase:', e);
+      console.warn('[Database] Erro ao sincronizar ranking no Firestore:', e.message);
     }
   }
 
   // Atualiza cache de ranking local
   updateLocalLeaderboard(player) {
+    if (!player || !player.nickname) return;
     try {
-      let list = this.getLocalLeaderboard();
+      let list = [];
+      const cachedRaw = localStorage.getItem(this.leaderboardLocalKey);
+      if (cachedRaw) {
+        try {
+          const parsed = JSON.parse(cachedRaw);
+          if (Array.isArray(parsed)) list = parsed;
+        } catch (e) {}
+      }
+
+      list = list.filter(p => !['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(p.nickname));
+
       const idx = list.findIndex(p => p.nickname === player.nickname);
       const entry = {
         nickname: player.nickname,
-        highScore: player.highScore || 0,
-        maxLevel: player.maxLevel || 1,
-        x1Wins: player.x1Wins || 0,
-        equippedSkin: player.equippedSkin || 'default',
-        updatedAt: Date.now()
+        highScore: Math.floor(player.highScore || 0),
+        maxLevel: Math.max(1, Math.floor(player.maxLevel || 1)),
+        x1Wins: Math.floor(player.x1Wins || 0),
+        equippedSkin: player.equippedSkin || 'cyan',
+        updatedAt: player.updatedAt || Date.now()
       };
 
       if (idx >= 0) {
-        list[idx] = entry;
+        list[idx].highScore = Math.max(list[idx].highScore || 0, entry.highScore);
+        list[idx].maxLevel = Math.max(list[idx].maxLevel || 1, entry.maxLevel);
+        list[idx].x1Wins = Math.max(list[idx].x1Wins || 0, entry.x1Wins);
+        list[idx].equippedSkin = entry.equippedSkin;
+        list[idx].updatedAt = entry.updatedAt;
       } else {
         list.push(entry);
       }
 
       localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(list));
-    } catch (e) {}
+      console.log(`[Database] Leaderboard local atualizado para ${player.nickname} (Score: ${entry.highScore})`);
+    } catch (e) {
+      console.warn('Erro ao atualizar leaderboard local:', e);
+    }
   }
 
   getLocalLeaderboard() {
     try {
+      let list = [];
       const data = localStorage.getItem(this.leaderboardLocalKey);
       if (data) {
-        const parsed = JSON.parse(data);
-        // Filtra para remover qualquer jogador de teste antigo (como CYBER_ACE, NEON_SHADOW)
-        const clean = Array.isArray(parsed) ? parsed.filter(p => p.nickname !== 'CYBER_ACE' && p.nickname !== 'NEON_SHADOW' && p.nickname !== 'HYPER_PULSE' && p.nickname !== 'SOLAR_DRONE') : [];
-        if (clean.length !== parsed.length) {
-          localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(clean));
-        }
-        return clean;
+        try {
+          const parsed = JSON.parse(data);
+          if (Array.isArray(parsed)) {
+            list = parsed.filter(p => !['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(p.nickname));
+          }
+        } catch (e) {}
       }
-    } catch (e) {}
 
-    return [];
+      // Garante que todos os perfis registrados localmente estejam na lista
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(this.storageKeyPrefix)) {
+          try {
+            const u = JSON.parse(localStorage.getItem(k));
+            if (u && u.nickname) {
+              const existingIdx = list.findIndex(p => p.nickname === u.nickname);
+              const uEntry = {
+                nickname: u.nickname,
+                highScore: Math.floor(u.highScore || 0),
+                maxLevel: Math.max(1, Math.floor(u.maxLevel || 1)),
+                x1Wins: Math.floor(u.x1Wins || 0),
+                equippedSkin: u.equippedSkin || 'cyan',
+                updatedAt: u.updatedAt || Date.now()
+              };
+              if (existingIdx >= 0) {
+                list[existingIdx].highScore = Math.max(list[existingIdx].highScore || 0, uEntry.highScore);
+                list[existingIdx].maxLevel = Math.max(list[existingIdx].maxLevel || 1, uEntry.maxLevel);
+                list[existingIdx].x1Wins = Math.max(list[existingIdx].x1Wins || 0, uEntry.x1Wins);
+              } else {
+                list.push(uEntry);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      // Garante que o piloto convidado com recorde atual também esteja na lista se não estiver logado
+      if (!this.currentUser) {
+        const localHs = parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10);
+        const guestHs = parseInt(localStorage.getItem('laser_guest_highscore') || '0', 10);
+        const bestHs = Math.max(localHs, guestHs);
+        if (bestHs > 0) {
+          const guestNick = this.getGuestNickname();
+          const existingIdx = list.findIndex(p => p.nickname === guestNick);
+          const guestEntry = {
+            nickname: guestNick,
+            highScore: bestHs,
+            maxLevel: parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10),
+            x1Wins: parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10),
+            equippedSkin: (this.game && this.game.equippedSkin) || localStorage.getItem('laser_reflex_skin') || 'cyan',
+            updatedAt: Date.now()
+          };
+          if (existingIdx >= 0) {
+            list[existingIdx].highScore = Math.max(list[existingIdx].highScore || 0, guestEntry.highScore);
+            list[existingIdx].maxLevel = Math.max(list[existingIdx].maxLevel || 1, guestEntry.maxLevel);
+            list[existingIdx].x1Wins = Math.max(list[existingIdx].x1Wins || 0, guestEntry.x1Wins);
+          } else {
+            list.push(guestEntry);
+          }
+        }
+      }
+
+      localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(list));
+      return list;
+    } catch (e) {
+      console.warn('Erro ao obter leaderboard local:', e);
+      return [];
+    }
   }
 
   // Obter o Ranking Público Global ordenado por Categoria diretamente do Banco de Dados
@@ -655,17 +840,34 @@ class DatabaseManager {
           }
         });
 
-        // O ranking reflete fielmente os dados cadastrados no banco
+        // Se o Firestore acabou de ser ativado e está vazio, sincroniza os pilotos locais
+        const localList = this.getLocalLeaderboard();
+        if (rankingList.length === 0 && localList.length > 0) {
+          console.log('[Database] Firestore ativo e vazio. Sincronizando pilotos locais para a nuvem...');
+          for (const item of localList) {
+            try {
+              await this.db.collection('ranking').doc(item.nickname).set(item, { merge: true });
+              rankingList.push(item);
+            } catch (e) {}
+          }
+        }
+
         console.log(`[Database] Ranking carregado diretamente do Firestore (${rankingList.length} pilotos).`);
         this.lastRankingSource = 'cloud';
         return rankingList;
       } catch (err) {
-        console.warn('[Database] Firestore em nuvem inacessível, exibindo banco local:', err.message);
+        console.warn('[Database] Firestore em nuvem inacessível, erro:', err.message);
+        if (err.message && (err.message.includes('disabled') || err.message.includes('PERMISSION_DENIED') || err.message.includes('SERVICE_DISABLED') || err.code === 'permission-denied')) {
+          this.lastRankingSource = 'cloud_disabled';
+        } else {
+          this.lastRankingSource = 'local';
+        }
       }
+    } else {
+      this.lastRankingSource = 'local';
     }
 
     // 2. Fallback do Banco Local
-    this.lastRankingSource = 'local';
     const localList = this.getLocalLeaderboard();
     const sortField = (category === 'x1') ? 'x1Wins' : 'highScore';
     localList.sort((a, b) => (b[sortField] || 0) - (a[sortField] || 0));
