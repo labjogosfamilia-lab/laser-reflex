@@ -1924,7 +1924,7 @@ class Game {
         const pin = prompt('🔒 ÁREA RESTRITA AO CRIADOR / ADMINISTRADOR\n\nDigite a Senha Mestra de Administrador para gerenciar o ranking:');
         if (!pin) return;
 
-        if (pin === '9988' || pin === 'admin') {
+        if (pin.trim() === '8398') {
           const confirmReset = confirm('👑 Autenticação de Administrador Concluída!\n\nDeseja ZERAR a pontuação de todos os jogadores no ranking agora?');
           if (confirmReset) {
             await this.db.zeroAllRankingScores();
