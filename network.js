@@ -381,7 +381,8 @@ class NetworkManager {
         type: 'HANDSHAKE',
         isHost: this.isHost,
         skin: this.game.equippedSkin,
-        color: this.game.player.skinColor
+        color: this.game.player.skinColor,
+        nickname: this.game.db?.currentUser?.nickname || (this.isHost ? 'PILOTO 1' : 'PILOTO 2')
       });
 
       this.fireConnected();
@@ -440,7 +441,8 @@ class NetworkManager {
       this.send({
         type: 'PONG_JOIN',
         hostSkin: this.game.equippedSkin,
-        hostColor: this.game.player.skinColor
+        hostColor: this.game.player.skinColor,
+        nickname: this.game.db?.currentUser?.nickname || 'HOST'
       });
       this.fireConnected();
       return;
@@ -451,7 +453,8 @@ class NetworkManager {
         type: 'HANDSHAKE',
         isHost: false,
         skin: this.game.equippedSkin,
-        color: this.game.player.skinColor
+        color: this.game.player.skinColor,
+        nickname: this.game.db?.currentUser?.nickname || 'CLIENT'
       });
       this.fireConnected();
       return;

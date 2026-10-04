@@ -1325,6 +1325,27 @@ class Game {
     this.network = new NetworkManager(this);
     this.initMultiplayerEvents();
 
+    // Estatísticas globais do jogador
+    this.x1Wins = parseInt(localStorage.getItem('laser_reflex_x1_wins') || '0', 10);
+
+    // Elementos DOM de Usuário e Ranking
+    this.domUserBar = document.getElementById('user-bar');
+    this.domUserGuestView = document.getElementById('user-guest-view');
+    this.domUserLoggedView = document.getElementById('user-logged-view');
+    this.domUserNickDisplay = document.getElementById('user-nick-display');
+    this.domUserCreditsDisplay = document.getElementById('user-credits-display');
+    this.domUserHighScoreDisplay = document.getElementById('user-highscore-display');
+
+    // Modais de Auth, Ranking e Perfil
+    this.domAuthModal = document.getElementById('auth-modal');
+    this.domRankingModal = document.getElementById('ranking-modal');
+    this.domProfileModal = document.getElementById('profile-modal');
+    this.currentRankingCategory = 'score';
+
+    // Inicializa Banco de Dados e Contas de Jogadores
+    this.db = new DatabaseManager(this);
+    this.initDatabaseEvents();
+
     this.initCanvasSize();
     this.setupEventListeners();
     this.renderShopUI();
@@ -1731,6 +1752,323 @@ class Game {
     } catch (e) {}
   }
 
+  initDatabaseEvents() {
+    this.db.onUserChange = (user) => {
+      this.updateUserBar(user);
+    };
+
+    // Botões da barra de usuário e menu
+    const btnOpenAuth = document.getElementById('btn-open-auth');
+    if (btnOpenAuth) {
+      btnOpenAuth.addEventListener('click', () => {
+        sounds.init();
+        this.showAuthModal(false);
+      });
+    }
+
+    const btnOpenRanking = document.getElementById('btn-open-ranking');
+    if (btnOpenRanking) {
+      btnOpenRanking.addEventListener('click', () => {
+        sounds.init();
+        this.showRankingModal('score');
+      });
+    }
+
+    const btnOpenRankingLogged = document.getElementById('btn-open-ranking-logged');
+    if (btnOpenRankingLogged) {
+      btnOpenRankingLogged.addEventListener('click', () => {
+        sounds.init();
+        this.showRankingModal('score');
+      });
+    }
+
+    const btnRankingMenu = document.getElementById('ranking-btn');
+    if (btnRankingMenu) {
+      btnRankingMenu.addEventListener('click', () => {
+        sounds.init();
+        this.showRankingModal('score');
+      });
+    }
+
+    const btnOpenProfile = document.getElementById('btn-open-profile');
+    if (btnOpenProfile) {
+      btnOpenProfile.addEventListener('click', () => {
+        sounds.init();
+        this.showProfileModal();
+      });
+    }
+
+    const btnLogout = document.getElementById('btn-logout');
+    if (btnLogout) {
+      btnLogout.addEventListener('click', () => {
+        sounds.init();
+        this.db.logout();
+      });
+    }
+
+    const btnProfileLogout = document.getElementById('btn-profile-logout');
+    if (btnProfileLogout) {
+      btnProfileLogout.addEventListener('click', () => {
+        sounds.init();
+        this.db.logout();
+        if (this.domProfileModal) this.domProfileModal.classList.add('hidden');
+      });
+    }
+
+    // Modal de Autenticação (Login / Cadastro)
+    const tabLogin = document.getElementById('tab-login');
+    const tabRegister = document.getElementById('tab-register');
+    const authSubmitBtn = document.getElementById('auth-submit-btn');
+    const authForm = document.getElementById('auth-form');
+    const authNickInput = document.getElementById('auth-nickname-input');
+    const authPinInput = document.getElementById('auth-pin-input');
+    const authStatusMsg = document.getElementById('auth-status-message');
+    const btnCloseAuth = document.getElementById('btn-close-auth');
+
+    let isRegisterMode = false;
+
+    if (tabLogin && tabRegister) {
+      tabLogin.addEventListener('click', () => {
+        isRegisterMode = false;
+        tabLogin.classList.add('active');
+        tabRegister.classList.remove('active');
+        if (authSubmitBtn) authSubmitBtn.textContent = 'ENTRAR NO JOGO ▶';
+        if (authStatusMsg) authStatusMsg.textContent = '';
+      });
+
+      tabRegister.addEventListener('click', () => {
+        isRegisterMode = true;
+        tabRegister.classList.add('active');
+        tabLogin.classList.remove('active');
+        if (authSubmitBtn) authSubmitBtn.textContent = 'CRIAR CONTA E SALVAR ▶';
+        if (authStatusMsg) authStatusMsg.textContent = '';
+      });
+    }
+
+    if (authForm) {
+      authForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const nick = (authNickInput?.value || '').trim();
+        const pin = (authPinInput?.value || '').trim();
+
+        if (authStatusMsg) {
+          authStatusMsg.textContent = 'Processando...';
+          authStatusMsg.style.color = '#00f0ff';
+        }
+
+        try {
+          if (isRegisterMode) {
+            await this.db.register(nick, pin);
+            if (authStatusMsg) {
+              authStatusMsg.textContent = 'Conta criada com sucesso!';
+              authStatusMsg.style.color = '#00ffa3';
+            }
+          } else {
+            await this.db.login(nick, pin);
+            if (authStatusMsg) {
+              authStatusMsg.textContent = 'Conectado com sucesso!';
+              authStatusMsg.style.color = '#00ffa3';
+            }
+          }
+
+          sounds.playLevelUp();
+          setTimeout(() => {
+            if (this.domAuthModal) this.domAuthModal.classList.add('hidden');
+            if (authNickInput) authNickInput.value = '';
+            if (authPinInput) authPinInput.value = '';
+          }, 600);
+        } catch (err) {
+          sounds.playError();
+          if (authStatusMsg) {
+            authStatusMsg.textContent = err.message || 'Erro ao processar.';
+            authStatusMsg.style.color = '#ff0055';
+          }
+        }
+      });
+    }
+
+    if (btnCloseAuth) {
+      btnCloseAuth.addEventListener('click', () => {
+        if (this.domAuthModal) this.domAuthModal.classList.add('hidden');
+      });
+    }
+
+    // Modal de Ranking
+    const tabRankScore = document.getElementById('tab-rank-score');
+    const tabRankX1 = document.getElementById('tab-rank-x1');
+    const btnRefreshRanking = document.getElementById('btn-refresh-ranking');
+    const btnCloseRanking = document.getElementById('btn-close-ranking');
+
+    if (tabRankScore) {
+      tabRankScore.addEventListener('click', () => {
+        this.showRankingModal('score');
+      });
+    }
+
+    if (tabRankX1) {
+      tabRankX1.addEventListener('click', () => {
+        this.showRankingModal('x1');
+      });
+    }
+
+    if (btnRefreshRanking) {
+      btnRefreshRanking.addEventListener('click', () => {
+        this.showRankingModal(this.currentRankingCategory);
+      });
+    }
+
+    if (btnCloseRanking) {
+      btnCloseRanking.addEventListener('click', () => {
+        if (this.domRankingModal) this.domRankingModal.classList.add('hidden');
+      });
+    }
+
+    // Modal de Perfil
+    const btnCloseProfile = document.getElementById('btn-close-profile');
+    if (btnCloseProfile) {
+      btnCloseProfile.addEventListener('click', () => {
+        if (this.domProfileModal) this.domProfileModal.classList.add('hidden');
+      });
+    }
+
+    this.updateUserBar(this.db.currentUser);
+  }
+
+  updateUserBar(user) {
+    if (user) {
+      if (this.domUserGuestView) this.domUserGuestView.classList.add('hidden');
+      if (this.domUserLoggedView) this.domUserLoggedView.classList.remove('hidden');
+      if (this.domUserNickDisplay) this.domUserNickDisplay.textContent = user.nickname;
+      if (this.domUserCreditsDisplay) this.domUserCreditsDisplay.textContent = user.credits ?? this.credits;
+      if (this.domUserHighScoreDisplay) this.domUserHighScoreDisplay.textContent = user.highScore ?? this.highScore;
+    } else {
+      if (this.domUserGuestView) this.domUserGuestView.classList.remove('hidden');
+      if (this.domUserLoggedView) this.domUserLoggedView.classList.add('hidden');
+    }
+  }
+
+  showAuthModal(isRegister = false) {
+    if (this.domAuthModal) {
+      this.domAuthModal.classList.remove('hidden');
+      const tabLogin = document.getElementById('tab-login');
+      const tabRegister = document.getElementById('tab-register');
+      const authStatusMsg = document.getElementById('auth-status-message');
+      if (authStatusMsg) authStatusMsg.textContent = '';
+
+      if (isRegister) {
+        tabRegister?.click();
+      } else {
+        tabLogin?.click();
+      }
+    }
+  }
+
+  async showRankingModal(category = 'score') {
+    this.currentRankingCategory = category;
+    if (this.domRankingModal) {
+      this.domRankingModal.classList.remove('hidden');
+    }
+
+    const tabRankScore = document.getElementById('tab-rank-score');
+    const tabRankX1 = document.getElementById('tab-rank-x1');
+    const statHeader = document.getElementById('ranking-stat-header');
+    const listContainer = document.getElementById('ranking-list-container');
+
+    if (category === 'x1') {
+      tabRankX1?.classList.add('active');
+      tabRankScore?.classList.remove('active');
+      if (statHeader) statHeader.textContent = 'VITÓRIAS X1';
+    } else {
+      tabRankScore?.classList.add('active');
+      tabRankX1?.classList.remove('active');
+      if (statHeader) statHeader.textContent = 'PONTUAÇÃO';
+    }
+
+    if (listContainer) {
+      listContainer.innerHTML = '<div class="ranking-loading">Carregando classificação global...</div>';
+    }
+
+    try {
+      const list = await this.db.getRanking(category);
+      if (!listContainer) return;
+
+      if (!list || list.length === 0) {
+        listContainer.innerHTML = '<div class="ranking-empty">Nenhum piloto registrado ainda. Crie sua conta e seja o primeiro!</div>';
+        return;
+      }
+
+      let html = '';
+      list.forEach((item, index) => {
+        const rank = index + 1;
+        let medal = `#${rank}`;
+        let rowClass = 'ranking-row';
+        if (rank === 1) {
+          medal = '🥇 1º';
+          rowClass += ' top-1';
+        } else if (rank === 2) {
+          medal = '🥈 2º';
+          rowClass += ' top-2';
+        } else if (rank === 3) {
+          medal = '🥉 3º';
+          rowClass += ' top-3';
+        }
+
+        const isMe = this.db.currentUser && this.db.currentUser.nickname === item.nickname;
+        if (isMe) rowClass += ' current-player';
+
+        const statVal = (category === 'x1') ? (item.x1Wins || 0) : (item.highScore || 0);
+
+        html += `
+          <div class="${rowClass}">
+            <span class="col-pos">${medal}</span>
+            <span class="col-pilot">${item.nickname} ${isMe ? '⭐ (Você)' : ''}</span>
+            <span class="col-stat">${statVal.toLocaleString('pt-BR')}</span>
+            <span class="col-level">Fase ${item.maxLevel || 1}</span>
+          </div>
+        `;
+      });
+
+      listContainer.innerHTML = html;
+    } catch (e) {
+      if (listContainer) {
+        listContainer.innerHTML = '<div class="ranking-empty">Erro ao carregar o ranking. Tente novamente mais tarde.</div>';
+      }
+    }
+  }
+
+  showProfileModal() {
+    if (this.domProfileModal) {
+      const user = this.db.currentUser;
+      if (!user) {
+        this.showAuthModal(false);
+        return;
+      }
+
+      const nickElem = document.getElementById('profile-nick');
+      const joinedElem = document.getElementById('profile-joined');
+      const scoreElem = document.getElementById('profile-highscore');
+      const levelElem = document.getElementById('profile-maxlevel');
+      const x1Elem = document.getElementById('profile-x1wins');
+      const creditsElem = document.getElementById('profile-credits');
+      const matchesElem = document.getElementById('profile-matches');
+      const skinsElem = document.getElementById('profile-skins');
+
+      if (nickElem) nickElem.textContent = user.nickname;
+      if (joinedElem) {
+        const d = new Date(user.createdAt || Date.now());
+        joinedElem.textContent = `Piloto desde ${d.toLocaleDateString('pt-BR')}`;
+      }
+      if (scoreElem) scoreElem.textContent = (user.highScore || this.highScore || 0).toLocaleString('pt-BR');
+      if (levelElem) levelElem.textContent = user.maxLevel || 1;
+      if (x1Elem) x1Elem.textContent = user.x1Wins || this.x1Wins || 0;
+      if (creditsElem) creditsElem.textContent = `🪙 ${(user.credits ?? this.credits ?? 0).toLocaleString('pt-BR')}`;
+      if (matchesElem) matchesElem.textContent = user.matchesPlayed || 0;
+      if (skinsElem) skinsElem.textContent = (user.unlockedSkins?.length || this.ownedSkins?.length || 1);
+
+      this.domProfileModal.classList.remove('hidden');
+    }
+  }
+
   showModeModal() {
     if (this.domStartScreen) this.domStartScreen.classList.add('hidden');
     if (this.domModeModal) this.domModeModal.classList.remove('hidden');
@@ -1957,7 +2295,25 @@ class Game {
     if (!msg || !msg.type) return;
 
     switch (msg.type) {
+      case 'HANDSHAKE':
+        if (msg.nickname) {
+          this.remotePlayer.nameTag = msg.nickname;
+          if (this.domX1P2Name) this.domX1P2Name.textContent = msg.nickname + ' (RIVAL)';
+        }
+        if (this.domX1P1Name) {
+          const myNick = this.db?.currentUser?.nickname || 'VOCÊ';
+          this.domX1P1Name.textContent = myNick + ' (VOCÊ)';
+        }
+        if (msg.skin && typeof SKINS !== 'undefined' && SKINS[msg.skin]) {
+          this.remotePlayer.skinColor = SKINS[msg.skin].color;
+        }
+        break;
+
       case 'MATCH_COUNTDOWN':
+        if (this.domX1P1Name) {
+          const myNick = this.db?.currentUser?.nickname || 'VOCÊ';
+          this.domX1P1Name.textContent = myNick + ' (VOCÊ)';
+        }
         this.runX1CountdownAndStart();
         break;
 
@@ -2114,11 +2470,21 @@ class Game {
       if (this.domX1ResultSubtitle) this.domX1ResultSubtitle.textContent = 'Você sobreviveu e destruiu o drone rival!';
       sounds.playLevelUp();
       this.addCredits(80); // Recompensa de campeão do X1!
+      this.x1Wins = (this.x1Wins || 0) + 1;
+      localStorage.setItem('laser_reflex_x1_wins', this.x1Wins);
     } else {
       if (this.domX1ResultTitle) this.domX1ResultTitle.textContent = '💀 DERROTADO NO X1!';
       if (this.domX1ResultSubtitle) this.domX1ResultSubtitle.textContent = 'Seu drone foi destruído pelos feixes de laser!';
       sounds.playHit();
       this.addCredits(25);
+    }
+
+    if (this.db) {
+      this.db.saveProgress({
+        x1Wins: this.x1Wins,
+        credits: this.credits,
+        matchesPlayed: (this.db.currentUser?.matchesPlayed || 0) + 1
+      });
     }
 
     if (this.domX1StatTime) this.domX1StatTime.textContent = `${this.x1MatchTime.toFixed(1)}s`;
@@ -2316,6 +2682,13 @@ class Game {
       this.player.skinColor = SKINS[skinId].color;
       sounds.playEquip();
       this.renderShopUI();
+      if (this.db) {
+        this.db.saveProgress({
+          credits: this.credits,
+          unlockedSkins: this.ownedSkins,
+          equippedSkin: this.equippedSkin
+        });
+      }
       return;
     }
 
@@ -2332,6 +2705,13 @@ class Game {
 
       sounds.playBuy();
       this.renderShopUI();
+      if (this.db) {
+        this.db.saveProgress({
+          credits: this.credits,
+          unlockedSkins: this.ownedSkins,
+          equippedSkin: this.equippedSkin
+        });
+      }
     } else {
       sounds.playError();
       if (this.domPlayerCredits) {
@@ -2580,6 +2960,15 @@ class Game {
     if (this.score > this.highScore) {
       this.highScore = Math.floor(this.score);
       localStorage.setItem('laser_reflex_highscore', this.highScore);
+    }
+
+    if (this.db) {
+      this.db.saveProgress({
+        highScore: this.highScore,
+        maxLevel: Math.max(this.db.currentUser?.maxLevel || 1, this.level),
+        credits: this.credits,
+        matchesPlayed: (this.db.currentUser?.matchesPlayed || 0) + 1
+      });
     }
 
     this.domFinalScore.textContent = Math.floor(this.score);

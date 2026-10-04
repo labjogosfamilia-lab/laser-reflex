@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Laser Reflex - Sobrevivência Neon</title>
-  <link rel="stylesheet" href="style.css?v=5.0">
+  <link rel="stylesheet" href="style.css?v=6.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -104,6 +104,29 @@
         <h1 class="glow-title">LASER REFLEX</h1>
         <p class="subtitle">SOBREVIVÊNCIA ARCADE NEON</p>
 
+        <!-- Barra de Status do Piloto / Usuário -->
+        <div id="user-bar" class="user-bar">
+          <div id="user-guest-view" class="user-bar-view">
+            <span class="user-tag">👤 CONVIDADO</span>
+            <div class="user-actions">
+              <button id="btn-open-auth" class="mini-glow-btn highlight-cyan">🔑 Entrar / Cadastrar</button>
+              <button id="btn-open-ranking" class="mini-glow-btn highlight-gold">🏆 Ranking Global</button>
+            </div>
+          </div>
+          <div id="user-logged-view" class="user-bar-view hidden">
+            <div class="user-info-pill">
+              <span class="user-avatar-icon">🛸</span>
+              <span id="user-nick-display" class="user-nick">PILOTO</span>
+              <span class="user-stats-brief">| 🪙 <span id="user-credits-display">0</span> | 🏆 <span id="user-highscore-display">0</span></span>
+            </div>
+            <div class="user-actions">
+              <button id="btn-open-profile" class="mini-glow-btn">👤 Meu Perfil</button>
+              <button id="btn-open-ranking-logged" class="mini-glow-btn highlight-gold">🏆 Ranking</button>
+              <button id="btn-logout" class="mini-glow-btn mini-danger-btn">Sair</button>
+            </div>
+          </div>
+        </div>
+
         <div class="instructions">
           <div class="instruction-row">
             <span class="key-badge">W A S D</span> ou <span class="key-badge">SETAS</span>
@@ -129,6 +152,7 @@
 
         <div class="menu-buttons-row">
           <button id="start-btn" class="glow-btn primary-btn">▶ JOGAR</button>
+          <button id="ranking-btn" class="glow-btn ranking-btn">🏆 RANKING</button>
           <button id="shop-btn" class="glow-btn shop-btn">🛒 LOJA</button>
         </div>
       </div>
@@ -390,8 +414,122 @@
       </div>
     </div>
 
+    <!-- Modal Cadastro / Login de Jogador -->
+    <div id="auth-modal" class="overlay-screen hidden">
+      <div class="overlay-card auth-card">
+        <h2 class="glow-title-small">IDENTIFICAÇÃO DO PILOTO</h2>
+        <p class="subtitle">SALVE SEU PROGRESSO E COMPITA NO RANKING GLOBAL</p>
+
+        <div class="auth-tabs">
+          <button id="tab-login" class="auth-tab-btn active">ENTRAR</button>
+          <button id="tab-register" class="auth-tab-btn">CRIAR CONTA</button>
+        </div>
+
+        <form id="auth-form" class="auth-form" onsubmit="return false;">
+          <div class="form-group">
+            <label for="auth-nickname-input">APELIDO DO PILOTO:</label>
+            <input type="text" id="auth-nickname-input" placeholder="Ex: CYBER_DRONE" maxlength="12" autocomplete="username" required />
+            <span class="input-hint">3 a 12 caracteres (letras, números e _)</span>
+          </div>
+
+          <div class="form-group">
+            <label for="auth-pin-input">SENHA / PIN SECRETO:</label>
+            <input type="password" id="auth-pin-input" placeholder="Mínimo 4 caracteres" maxlength="20" autocomplete="current-password" required />
+            <span class="input-hint">Para recuperar seu progresso em qualquer celular ou PC</span>
+          </div>
+
+          <div id="auth-status-message" class="auth-status-msg"></div>
+
+          <button type="submit" id="auth-submit-btn" class="glow-btn primary-btn large-btn">ENTRAR NO JOGO ▶</button>
+        </form>
+
+        <button id="btn-close-auth" class="glow-btn back-btn">← VOLTAR</button>
+      </div>
+    </div>
+
+    <!-- Modal Ranking Público Global -->
+    <div id="ranking-modal" class="overlay-screen hidden">
+      <div class="overlay-card ranking-card">
+        <h2 class="glow-title-small">🏆 RANKING GLOBAL DE PILOTOS</h2>
+        <p class="subtitle">OS MAIORES RECORDISTAS DE SOBREVIVÊNCIA E DUELOS</p>
+
+        <div class="ranking-tabs">
+          <button id="tab-rank-score" class="ranking-tab-btn active">🚀 MODO SOLO (PONTUAÇÃO)</button>
+          <button id="tab-rank-x1" class="ranking-tab-btn">⚔️ DUELO X1 (VITÓRIAS)</button>
+        </div>
+
+        <div class="ranking-table-header">
+          <span class="col-pos">POS</span>
+          <span class="col-pilot">PILOTO</span>
+          <span class="col-stat" id="ranking-stat-header">PONTUAÇÃO</span>
+          <span class="col-level">FASE MÁX</span>
+        </div>
+
+        <div class="ranking-list" id="ranking-list-container">
+          <div class="ranking-loading">Carregando classificação global...</div>
+        </div>
+
+        <div class="ranking-footer">
+          <button id="btn-refresh-ranking" class="mini-glow-btn">🔄 Atualizar</button>
+          <button id="btn-close-ranking" class="glow-btn back-btn">← VOLTAR AO JOGO</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Perfil do Jogador -->
+    <div id="profile-modal" class="overlay-screen hidden">
+      <div class="overlay-card profile-card">
+        <h2 class="glow-title-small">PERFIL DO PILOTO</h2>
+        <div class="profile-header-box">
+          <span class="profile-avatar">🛸</span>
+          <div class="profile-header-info">
+            <strong id="profile-nick" class="profile-nick-text">PILOTO</strong>
+            <span id="profile-joined" class="profile-sub-text">Conta conectada</span>
+          </div>
+        </div>
+
+        <div class="stats-box">
+          <div class="stat-item">
+            <span>RECORDE SOLO:</span>
+            <strong id="profile-highscore">0</strong>
+          </div>
+          <div class="stat-item">
+            <span>FASE MÁXIMA:</span>
+            <strong id="profile-maxlevel">1</strong>
+          </div>
+          <div class="stat-item">
+            <span>VITÓRIAS NO X1:</span>
+            <strong id="profile-x1wins">0</strong>
+          </div>
+          <div class="stat-item">
+            <span>CRÉDITOS TOTAIS:</span>
+            <strong id="profile-credits">🪙 0</strong>
+          </div>
+          <div class="stat-item">
+            <span>PARTIDAS:</span>
+            <strong id="profile-matches">0</strong>
+          </div>
+          <div class="stat-item">
+            <span>SKINS ADQUIRIDAS:</span>
+            <strong id="profile-skins">1</strong>
+          </div>
+        </div>
+
+        <div class="menu-buttons-row">
+          <button id="btn-profile-logout" class="glow-btn danger-btn">SAIR DA CONTA</button>
+          <button id="btn-close-profile" class="glow-btn back-btn">← VOLTAR</button>
+        </div>
+      </div>
+    </div>
+
+  <!-- Firebase SDK para Banco de Dados Firestore na Nuvem (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <!-- Scripts do Jogo -->
+  <script src="database.js?v=6.0"></script>
   <script src="peerjs.min.js"></script>
-  <script src="network.js?v=5.0"></script>
-  <script src="game.js?v=5.0"></script>
+  <script src="network.js?v=6.0"></script>
+  <script src="game.js?v=6.0"></script>
 </body>
 </html>
