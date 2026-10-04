@@ -849,7 +849,13 @@ canvas {
   gap: 12px;
 }
 
-.hud-mode-group.hidden {
+.hidden {
+  display: none !important;
+}
+
+.hud-mode-group.hidden,
+.hud-shoot-box.hidden,
+.mobile-action-btn.hidden {
   display: none !important;
 }
 

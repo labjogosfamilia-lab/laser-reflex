@@ -508,21 +508,19 @@ class Player {
   }
 
   takePiercingDamage(particles) {
-    if (this.invulnerableTimer > 0 || this.isDashing) {
-      return false; // Ileso pelo dash ativo ou invulnerabilidade
-    }
-
-    // Perfura o escudo! Elimina 1 vida diretamente mesmo se ele tiver escudo
-    this.lives--;
-    this.invulnerableTimer = 1.0;
+    // Perfura o escudo e armadura! Elimina 1 vida diretamente
+    this.lives = Math.max(0, this.lives - 1);
+    this.invulnerableTimer = 0.5; // Breve piscar visual
     sounds.playPiercingHit();
 
     // Partículas densas de impacto perfurante
-    for (let i = 0; i < 40; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const spd = 90 + Math.random() * 220;
-      const color = (i % 2 === 0) ? '#ff0055' : '#ffffff';
-      particles.push(new Particle(this.x, this.y, color, Math.cos(ang) * spd, Math.sin(ang) * spd, 0.6, 3.5));
+    if (particles) {
+      for (let i = 0; i < 40; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 90 + Math.random() * 220;
+        const color = (i % 2 === 0) ? '#ff0055' : '#ffffff';
+        particles.push(new Particle(this.x, this.y, color, Math.cos(ang) * spd, Math.sin(ang) * spd, 0.6, 3.5));
+      }
     }
 
     return true;
@@ -723,16 +721,20 @@ class LaserBullet {
     this.shooterId = options.shooterId || 'player'; // 'p1', 'p2' ou 'player'
     this.x = options.x;
     this.y = options.y;
+    this.prevX = options.x;
+    this.prevY = options.y;
     this.dirX = options.dirX;
     this.dirY = options.dirY;
-    this.speed = options.speed || 620;
+    this.speed = options.speed || 640;
     this.color = options.color || '#00f0ff';
-    this.radius = 6;
+    this.radius = 8;
     this.life = options.life || 2.4;
     this.trail = [];
   }
 
   update(dt, particles) {
+    this.prevX = this.x;
+    this.prevY = this.y;
     this.x += this.dirX * this.speed * dt;
     this.y += this.dirY * this.speed * dt;
     this.life -= dt;
@@ -798,8 +800,20 @@ class LaserBullet {
   }
 
   checkCollision(targetX, targetY, targetRadius) {
-    const dist = Math.hypot(this.x - targetX, this.y - targetY);
-    return dist < (this.radius + targetRadius);
+    const totalR = this.radius + targetRadius + 6; // Hitbox generosa e justa
+    // 1. Checa proximidade direta
+    if (Math.hypot(this.x - targetX, this.y - targetY) <= totalR) return true;
+    // 2. Checa projeção na reta da trajetória percorrida entre frames (evita tunneling)
+    const segDx = this.x - this.prevX;
+    const segDy = this.y - this.prevY;
+    const segLenSq = segDx * segDx + segDy * segDy;
+    if (segLenSq > 0) {
+      const t = Math.max(0, Math.min(1, ((targetX - this.prevX) * segDx + (targetY - this.prevY) * segDy) / segLenSq));
+      const projX = this.prevX + t * segDx;
+      const projY = this.prevY + t * segDy;
+      if (Math.hypot(targetX - projX, targetY - projY) <= totalR) return true;
+    }
+    return false;
   }
 
   isOutOfBounds() {
@@ -1304,8 +1318,10 @@ class Game {
     this.domX1StatMyLives = document.getElementById('x1-stat-my-lives');
     this.domX1StatEnemyLives = document.getElementById('x1-stat-enemy-lives');
 
-    // Sistema de Balas de Laser
+    // Sistema de Balas de Laser (Exclusivo Multiplayer X1)
     this.bullets = [];
+    this.consumedBulletIds = new Set();
+    this.domShootBox = document.getElementById('hud-shoot-box');
     this.domShootBar = document.getElementById('shoot-bar');
     this.domShootTimerText = document.getElementById('shoot-timer-text');
     this.domMobileShootBtn = document.getElementById('mobile-shoot-btn');
@@ -1844,9 +1860,15 @@ class Game {
     this.pickups = [];
     this.particles = [];
     this.bullets = [];
+    this.consumedBulletIds = new Set();
+    this.player.shootCooldownTimer = 0;
     this.laserSpawnTimer = 0;
     this.pickupSpawnTimer = 0;
     this.rematchRequested = false;
+
+    // Exibe barra de tiro a laser e botão mobile exclusivamente no Modo X1
+    if (this.domShootBox) this.domShootBox.classList.remove('hidden');
+    if (this.domMobileShootBtn) this.domMobileShootBtn.classList.remove('hidden');
 
     // Esconde telas e modais
     if (this.domStartScreen) this.domStartScreen.classList.add('hidden');
@@ -1976,25 +1998,57 @@ class Game {
         break;
 
       case 'PLAYER_BULLET_HIT':
+        if (msg.bulletId) this.consumedBulletIds.add(msg.bulletId);
         for (let i = this.bullets.length - 1; i >= 0; i--) {
           if (this.bullets[i].id === msg.bulletId) {
             this.bullets.splice(i, 1);
             break;
           }
         }
-        this.remotePlayer.lives = msg.lives;
-        this.remotePlayer.shieldActive = msg.shieldActive;
+        if (msg.victimLives !== undefined) {
+          this.remotePlayer.lives = msg.victimLives;
+        } else if (msg.lives !== undefined) {
+          this.remotePlayer.lives = msg.lives;
+        }
+        if (msg.victimShield !== undefined) {
+          this.remotePlayer.shieldActive = msg.victimShield;
+        }
         this.updateX1HUD();
         sounds.playPiercingHit();
 
-        for (let k = 0; k < 35; k++) {
+        for (let k = 0; k < 40; k++) {
           const ang = Math.random() * Math.PI * 2;
-          const spd = 70 + Math.random() * 180;
-          this.particles.push(new Particle(this.remotePlayer.x, this.remotePlayer.y, '#ff0055', Math.cos(ang) * spd, Math.sin(ang) * spd, 0.55, 3.5));
+          const spd = 80 + Math.random() * 200;
+          this.particles.push(new Particle(this.remotePlayer.x, this.remotePlayer.y, '#ff0055', Math.cos(ang) * spd, Math.sin(ang) * spd, 0.6, 3.5));
         }
 
         if (this.gameState === STATE.PLAYING && this.remotePlayer.lives <= 0) {
           this.triggerX1GameOver(true);
+        }
+        break;
+
+      case 'DIRECT_BULLET_IMPACT':
+        if (msg.bulletId && !this.consumedBulletIds.has(msg.bulletId)) {
+          this.consumedBulletIds.add(msg.bulletId);
+          for (let i = this.bullets.length - 1; i >= 0; i--) {
+            if (this.bullets[i].id === msg.bulletId) {
+              this.bullets.splice(i, 1);
+              break;
+            }
+          }
+          this.player.takePiercingDamage(this.particles);
+          this.screenShake = 16;
+          this.updateX1HUD();
+
+          if (this.player.lives <= 0) {
+            const enemyRole = this.isHost ? 'p2' : 'p1';
+            this.network.send({
+              type: 'GAME_OVER_X1',
+              winner: enemyRole
+            });
+            this.triggerX1GameOver(false);
+            return;
+          }
         }
         break;
 
@@ -2108,6 +2162,9 @@ class Game {
     this.pickups = [];
     this.particles = [];
     this.bullets = [];
+    this.consumedBulletIds = new Set();
+    if (this.domShootBox) this.domShootBox.classList.add('hidden');
+    if (this.domMobileShootBtn) this.domMobileShootBtn.classList.add('hidden');
   }
 
   addLaser(options) {
@@ -2137,6 +2194,9 @@ class Game {
     this.pickups = [];
     this.particles = [];
     this.bullets = [];
+    this.consumedBulletIds = new Set();
+    if (this.domShootBox) this.domShootBox.classList.add('hidden');
+    if (this.domMobileShootBtn) this.domMobileShootBtn.classList.add('hidden');
     this.laserSpawnTimer = 0;
     this.pickupSpawnTimer = 0;
     this.laserRainActive = false;
@@ -2655,13 +2715,11 @@ class Game {
     } else {
       this.domDashBar.classList.remove('ready');
     }
-
-    // Atualiza Barra e Status do Tiro a Laser
-    this.updateShootHUD();
   }
 
   triggerPlayerShoot(aimWorldX, aimWorldY) {
-    if (this.gameState !== STATE.PLAYING) return;
+    // O tiro a laser funciona EXCLUSIVAMENTE no multiplayer (Duelo X1)
+    if (!this.isMultiplayer || this.gameState !== STATE.PLAYING) return;
 
     let dirX = 0;
     let dirY = 0;
@@ -2674,12 +2732,10 @@ class Game {
     }
 
     const shotData = this.player.triggerShoot(dirX, dirY);
-    if (!shotData) return; // Recarga ainda em andamento
+    if (!shotData) return; // Recarga de 5s ainda em andamento
 
-    const myRole = this.isMultiplayer ? (this.isHost ? 'p1' : 'p2') : 'player';
-    const bulletColor = this.isMultiplayer
-      ? (this.isHost ? '#00f0ff' : '#ff0055')
-      : (this.player.skinColor || '#00f0ff');
+    const myRole = this.isHost ? 'p1' : 'p2';
+    const bulletColor = this.isHost ? '#00f0ff' : '#ff0055';
 
     const bulletId = 'b_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const bullet = new LaserBullet({
@@ -2689,7 +2745,7 @@ class Game {
       y: shotData.y,
       dirX: shotData.dirX,
       dirY: shotData.dirY,
-      speed: 620,
+      speed: 640,
       color: bulletColor
     });
 
@@ -2702,7 +2758,7 @@ class Game {
       this.particles.push(new Particle(shotData.x, shotData.y, bulletColor, Math.cos(ang) * spd, Math.sin(ang) * spd, 0.3, 3));
     }
 
-    if (this.isMultiplayer && this.network.isConnected) {
+    if (this.network && this.network.isConnected) {
       this.network.send({
         type: 'SPAWN_BULLET',
         bullet: {
@@ -2722,6 +2778,8 @@ class Game {
   }
 
   updateShootHUD() {
+    if (!this.isMultiplayer) return;
+
     const cd = this.player.shootCooldownTimer;
     const maxCd = this.player.shootCooldownMax;
     const ratio = Math.max(0, 1 - (cd / maxCd));
@@ -2951,26 +3009,28 @@ class Game {
         continue;
       }
 
-      // No modo Multiplayer: se a bala pertence ao oponente, checa acerto no jogador local
+      // No modo Multiplayer: checa colisões do tiro nos dois jogadores (Dano Perfurante 100% garantido)
       if (this.isMultiplayer) {
         const myRole = this.isHost ? 'p1' : 'p2';
-        if (b.shooterId !== myRole && b.checkCollision(this.player.x, this.player.y, this.player.radius)) {
-          // O tiro a laser perfura o escudo e elimina uma vida diretamente!
-          const tookHit = this.player.takePiercingDamage(this.particles);
-          this.bullets.splice(i, 1);
+        const enemyRole = this.isHost ? 'p2' : 'p1';
 
-          if (tookHit) {
+        // 1. Checa se uma bala disparada pelo oponente acertou o drone LOCAL
+        if (b.shooterId !== myRole && !this.consumedBulletIds.has(b.id)) {
+          if (b.checkCollision(this.player.x, this.player.y, this.player.radius)) {
+            this.consumedBulletIds.add(b.id);
+            this.bullets.splice(i, 1);
+            this.player.takePiercingDamage(this.particles);
             this.screenShake = 16;
             this.updateX1HUD();
+
             this.network.send({
               type: 'PLAYER_BULLET_HIT',
               bulletId: b.id,
-              lives: this.player.lives,
-              shieldActive: this.player.shieldActive
+              victimLives: this.player.lives,
+              victimShield: this.player.shieldActive
             });
 
             if (this.player.lives <= 0) {
-              const enemyRole = this.isHost ? 'p2' : 'p1';
               this.network.send({
                 type: 'GAME_OVER_X1',
                 winner: enemyRole
@@ -2978,10 +3038,49 @@ class Game {
               this.triggerX1GameOver(false);
               return;
             }
+            continue;
           }
-          continue;
+        }
+
+        // 2. Checa se a MINHA bala acertou o drone RIVAL (Shooter-authoritative: garante o dano visual)
+        if (b.shooterId === myRole && !this.consumedBulletIds.has(b.id)) {
+          if (b.checkCollision(this.remotePlayer.x, this.remotePlayer.y, this.remotePlayer.radius)) {
+            this.consumedBulletIds.add(b.id);
+            this.bullets.splice(i, 1);
+            this.remotePlayer.lives = Math.max(0, this.remotePlayer.lives - 1);
+            sounds.playPiercingHit();
+            this.screenShake = 16;
+
+            for (let k = 0; k < 40; k++) {
+              const ang = Math.random() * Math.PI * 2;
+              const spd = 90 + Math.random() * 200;
+              this.particles.push(new Particle(this.remotePlayer.x, this.remotePlayer.y, '#ff0055', Math.cos(ang) * spd, Math.sin(ang) * spd, 0.6, 3.5));
+            }
+
+            this.updateX1HUD();
+
+            this.network.send({
+              type: 'DIRECT_BULLET_IMPACT',
+              bulletId: b.id,
+              newRivalLives: this.remotePlayer.lives
+            });
+
+            if (this.remotePlayer.lives <= 0) {
+              this.network.send({
+                type: 'GAME_OVER_X1',
+                winner: myRole
+              });
+              this.triggerX1GameOver(true);
+              return;
+            }
+            continue;
+          }
         }
       }
+    }
+
+    if (!this.isMultiplayer && this.bullets.length > 0) {
+      this.bullets = [];
     }
 
     // Atualiza Coletáveis (Pickups)
