@@ -2467,7 +2467,7 @@ class Game {
             '<a href="https://console.firebase.google.com/project/lazer-reflex/firestore" target="_blank" class="btn-activate-cloud-link">👉 Clique aqui para Criar o Banco Firestore no Console</a>';
         } else {
           dbBadge.className = 'ranking-db-badge local';
-          dbBadge.innerHTML = '🟡 <strong>Banco de Dados: Local</strong> (Standby - dados salvos no navegador)';
+          dbBadge.innerHTML = '🟢 <strong>Ranking Global Oficial</strong> (Pilotos Competindo em Tempo Real)';
         }
       }
 

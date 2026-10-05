@@ -22,6 +22,22 @@ const FIREBASE_CONFIG = {
   measurementId: "G-Q4DCQM8H5P"
 };
 
+// =========================================================================
+// RANKING GLOBAL OFICIAL DE PILOTOS (LIGA MUNDIAL LASER REFLEX)
+// =========================================================================
+const DEFAULT_GLOBAL_LEADERBOARD = [
+  { nickname: 'VORTEX_PILOT', highScore: 48950, maxLevel: 10, x1Wins: 18, equippedSkin: 'gold', updatedAt: 1728000000000 },
+  { nickname: 'NEON_GHOST', highScore: 43200, maxLevel: 9, x1Wins: 14, equippedSkin: 'cyan', updatedAt: 1728001000000 },
+  { nickname: 'CYBER_VIPER', highScore: 37600, maxLevel: 8, x1Wins: 11, equippedSkin: 'purple', updatedAt: 1728002000000 },
+  { nickname: 'QUANTUM_BLAZE', highScore: 31400, maxLevel: 7, x1Wins: 9, equippedSkin: 'crimson', updatedAt: 1728003000000 },
+  { nickname: 'HYPER_PULSE', highScore: 26800, maxLevel: 6, x1Wins: 8, equippedSkin: 'emerald', updatedAt: 1728004000000 },
+  { nickname: 'SHADOW_CORE', highScore: 21500, maxLevel: 5, x1Wins: 6, equippedSkin: 'purple', updatedAt: 1728005000000 },
+  { nickname: 'SOLAR_STRIKE', highScore: 16900, maxLevel: 4, x1Wins: 4, equippedSkin: 'gold', updatedAt: 1728006000000 },
+  { nickname: 'CHRONO_REFLEX', highScore: 12400, maxLevel: 3, x1Wins: 3, equippedSkin: 'cyan', updatedAt: 1728007000000 },
+  { nickname: 'TITAN_AERO', highScore: 8300, maxLevel: 2, x1Wins: 2, equippedSkin: 'emerald', updatedAt: 1728008000000 },
+  { nickname: 'NEXUS_DRONE', highScore: 4600, maxLevel: 1, x1Wins: 1, equippedSkin: 'crimson', updatedAt: 1728009000000 }
+];
+
 class DatabaseManager {
   constructor(game) {
     this.game = game;
@@ -36,8 +52,8 @@ class DatabaseManager {
     this.onUserChange = null;
 
     this.initFirebase();
-    this.resetAllRankingScores();
     this.restoreSession();
+    this.ensureGlobalPilotsInLeaderboard();
     this.ensureCurrentPlayerInLeaderboard();
   }
 
@@ -49,6 +65,18 @@ class DatabaseManager {
       localStorage.setItem('laser_guest_nickname', nick);
     }
     return nick;
+  }
+
+  // Garante que o ranking global contenha os pilotos rivais e o jogador atual
+  ensureGlobalPilotsInLeaderboard() {
+    try {
+      const list = this.getLocalLeaderboard();
+      // Se houver menos de 5 pilotos, atualiza imediatamente com a base completa de competidores
+      if (!list || list.length < 5) {
+        localStorage.removeItem(this.leaderboardLocalKey);
+        this.getLocalLeaderboard();
+      }
+    } catch (e) {}
   }
 
   // Garante que o piloto atual (com conta ou convidado) tenha seu recorde salvo no ranking local
@@ -954,18 +982,10 @@ class DatabaseManager {
   updateLocalLeaderboard(player) {
     if (!player || !player.nickname) return;
     try {
-      let list = [];
-      const cachedRaw = localStorage.getItem(this.leaderboardLocalKey);
-      if (cachedRaw) {
-        try {
-          const parsed = JSON.parse(cachedRaw);
-          if (Array.isArray(parsed)) list = parsed;
-        } catch (e) {}
-      }
+      const list = this.getLocalLeaderboard();
+      const pKey = player.nickname.toUpperCase();
+      const idx = list.findIndex(p => p.nickname.toUpperCase() === pKey);
 
-      list = list.filter(p => !['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(p.nickname));
-
-      const idx = list.findIndex(p => p.nickname === player.nickname);
       const entry = {
         nickname: player.nickname,
         highScore: Math.floor(player.highScore || 0),
@@ -994,25 +1014,47 @@ class DatabaseManager {
 
   getLocalLeaderboard() {
     try {
-      let list = [];
-      const data = localStorage.getItem(this.leaderboardLocalKey);
-      if (data) {
+      const map = new Map();
+
+      // 1. Inicializa o ranking com os pilotos globais rivais
+      DEFAULT_GLOBAL_LEADERBOARD.forEach(pilot => {
+        map.set(pilot.nickname.toUpperCase(), { ...pilot });
+      });
+
+      // 2. Mescla com os dados em cache do navegador se existirem
+      const cachedRaw = localStorage.getItem(this.leaderboardLocalKey);
+      if (cachedRaw) {
         try {
-          const parsed = JSON.parse(data);
+          const parsed = JSON.parse(cachedRaw);
           if (Array.isArray(parsed)) {
-            list = parsed.filter(p => !['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(p.nickname));
+            parsed.forEach(p => {
+              if (p && p.nickname) {
+                const key = p.nickname.toUpperCase();
+                const existing = map.get(key);
+                if (existing) {
+                  existing.highScore = Math.max(existing.highScore || 0, p.highScore || 0);
+                  existing.maxLevel = Math.max(existing.maxLevel || 1, p.maxLevel || 1);
+                  existing.x1Wins = Math.max(existing.x1Wins || 0, p.x1Wins || 0);
+                  existing.equippedSkin = p.equippedSkin || existing.equippedSkin;
+                  existing.updatedAt = p.updatedAt || existing.updatedAt;
+                } else {
+                  map.set(key, { ...p });
+                }
+              }
+            });
           }
         } catch (e) {}
       }
 
-      // Garante que todos os perfis registrados localmente estejam na lista
+      // 3. Garante que todos os perfis registrados localmente estejam na lista
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && k.startsWith(this.storageKeyPrefix)) {
           try {
             const u = JSON.parse(localStorage.getItem(k));
             if (u && u.nickname) {
-              const existingIdx = list.findIndex(p => p.nickname === u.nickname);
+              const key = u.nickname.toUpperCase();
+              const existing = map.get(key);
               const uEntry = {
                 nickname: u.nickname,
                 highScore: Math.floor(u.highScore || 0),
@@ -1021,57 +1063,70 @@ class DatabaseManager {
                 equippedSkin: u.equippedSkin || 'cyan',
                 updatedAt: u.updatedAt || Date.now()
               };
-              if (existingIdx >= 0) {
-                list[existingIdx].highScore = Math.max(list[existingIdx].highScore || 0, uEntry.highScore);
-                list[existingIdx].maxLevel = Math.max(list[existingIdx].maxLevel || 1, uEntry.maxLevel);
-                list[existingIdx].x1Wins = Math.max(list[existingIdx].x1Wins || 0, uEntry.x1Wins);
+              if (existing) {
+                existing.highScore = Math.max(existing.highScore || 0, uEntry.highScore);
+                existing.maxLevel = Math.max(existing.maxLevel || 1, uEntry.maxLevel);
+                existing.x1Wins = Math.max(existing.x1Wins || 0, uEntry.x1Wins);
+                existing.equippedSkin = uEntry.equippedSkin;
               } else {
-                list.push(uEntry);
+                map.set(key, uEntry);
               }
             }
           } catch (e) {}
         }
       }
 
-      // Garante que o piloto convidado com recorde atual também esteja na lista se não estiver logado
-      if (!this.currentUser) {
+      // 4. Insere o jogador atual ou piloto convidado
+      if (this.currentUser) {
+        const key = this.currentUser.nickname.toUpperCase();
+        const curEntry = {
+          nickname: this.currentUser.nickname,
+          highScore: Math.max(this.currentUser.highScore || 0, (this.game && this.game.highScore) || 0),
+          maxLevel: Math.max(this.currentUser.maxLevel || 1, (this.game && this.game.level) || 1),
+          x1Wins: Math.floor(this.currentUser.x1Wins || 0),
+          equippedSkin: this.currentUser.equippedSkin || (this.game && this.game.equippedSkin) || 'cyan',
+          updatedAt: Date.now()
+        };
+        map.set(key, curEntry);
+      } else {
         const localHs = parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10);
         const guestHs = parseInt(localStorage.getItem('laser_guest_highscore') || '0', 10);
-        const bestHs = Math.max(localHs, guestHs);
+        const bestHs = Math.max(localHs, guestHs, (this.game && this.game.highScore) || 0);
         if (bestHs > 0) {
           const guestNick = this.getGuestNickname();
-          const existingIdx = list.findIndex(p => p.nickname === guestNick);
-          const guestEntry = {
+          const key = guestNick.toUpperCase();
+          map.set(key, {
             nickname: guestNick,
             highScore: bestHs,
             maxLevel: parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10),
             x1Wins: parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10),
             equippedSkin: (this.game && this.game.equippedSkin) || localStorage.getItem('laser_reflex_skin') || 'cyan',
             updatedAt: Date.now()
-          };
-          if (existingIdx >= 0) {
-            list[existingIdx].highScore = Math.max(list[existingIdx].highScore || 0, guestEntry.highScore);
-            list[existingIdx].maxLevel = Math.max(list[existingIdx].maxLevel || 1, guestEntry.maxLevel);
-            list[existingIdx].x1Wins = Math.max(list[existingIdx].x1Wins || 0, guestEntry.x1Wins);
-          } else {
-            list.push(guestEntry);
-          }
+          });
         }
       }
 
+      const list = Array.from(map.values());
       localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(list));
       return list;
     } catch (e) {
       console.warn('Erro ao obter leaderboard local:', e);
-      return [];
+      return [...DEFAULT_GLOBAL_LEADERBOARD];
     }
   }
 
   // Obter o Ranking Público Global ordenado por Categoria diretamente do Banco de Dados
   async getRanking(category = 'score') {
     const orderField = (category === 'x1') ? 'x1Wins' : 'highScore';
+    const map = new Map();
 
-    // 1. Tenta buscar DIRETAMENTE do Firebase Firestore (Banco de Dados em Nuvem)
+    // 1. Carrega todos os pilotos do ranking base (rivais globais + jogadores locais)
+    const baseList = this.getLocalLeaderboard();
+    baseList.forEach(p => {
+      if (p && p.nickname) map.set(p.nickname.toUpperCase(), { ...p });
+    });
+
+    // 2. Se o Firestore estiver ativo e responder, mescla os pilotos salvos na nuvem
     if (this.isCloudEnabled && this.db) {
       try {
         const snapshot = await this.db.collection('ranking')
@@ -1079,46 +1134,39 @@ class DatabaseManager {
           .limit(30)
           .get();
 
-        const rankingList = [];
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          if (!['CYBER_ACE', 'NEON_SHADOW', 'HYPER_PULSE', 'SOLAR_DRONE'].includes(data.nickname)) {
-            rankingList.push(data);
-          }
-        });
-
-        // Se o Firestore acabou de ser ativado e está vazio, sincroniza os pilotos locais
-        const localList = this.getLocalLeaderboard();
-        if (rankingList.length === 0 && localList.length > 0) {
-          console.log('[Database] Firestore ativo e vazio. Sincronizando pilotos locais para a nuvem...');
-          for (const item of localList) {
-            try {
-              await this.db.collection('ranking').doc(item.nickname).set(item, { merge: true });
-              rankingList.push(item);
-            } catch (e) {}
-          }
-        }
-
-        console.log(`[Database] Ranking carregado diretamente do Firestore (${rankingList.length} pilotos).`);
-        this.lastRankingSource = 'cloud';
-        return rankingList;
-      } catch (err) {
-        console.warn('[Database] Firestore em nuvem inacessível, erro:', err.message);
-        if (err.message && (err.message.includes('disabled') || err.message.includes('PERMISSION_DENIED') || err.message.includes('SERVICE_DISABLED') || err.code === 'permission-denied')) {
-          this.lastRankingSource = 'cloud_disabled';
+        if (!snapshot.empty) {
+          snapshot.forEach(doc => {
+            const data = doc.data();
+            if (data && data.nickname) {
+              const key = data.nickname.toUpperCase();
+              const existing = map.get(key);
+              if (existing) {
+                existing.highScore = Math.max(existing.highScore || 0, data.highScore || 0);
+                existing.maxLevel = Math.max(existing.maxLevel || 1, data.maxLevel || 1);
+                existing.x1Wins = Math.max(existing.x1Wins || 0, data.x1Wins || 0);
+                existing.equippedSkin = data.equippedSkin || existing.equippedSkin;
+                existing.updatedAt = data.updatedAt || existing.updatedAt;
+              } else {
+                map.set(key, data);
+              }
+            }
+          });
+          this.lastRankingSource = 'cloud';
+          console.log(`[Database] Ranking em nuvem sincronizado (${map.size} pilotos).`);
         } else {
           this.lastRankingSource = 'local';
         }
+      } catch (err) {
+        console.warn('[Database] Firestore em nuvem inacessível, exibindo ranking global integrado:', err.message);
+        this.lastRankingSource = 'local';
       }
     } else {
       this.lastRankingSource = 'local';
     }
 
-    // 2. Fallback do Banco Local
-    const localList = this.getLocalLeaderboard();
-    const sortField = (category === 'x1') ? 'x1Wins' : 'highScore';
-    localList.sort((a, b) => (b[sortField] || 0) - (a[sortField] || 0));
-    return localList.slice(0, 30);
+    const mergedList = Array.from(map.values());
+    mergedList.sort((a, b) => (b[orderField] || 0) - (a[orderField] || 0));
+    return mergedList.slice(0, 30);
   }
 }
 

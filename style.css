@@ -1982,10 +1982,10 @@ canvas {
 }
 
 .ranking-db-badge.local {
-  background: rgba(255, 230, 0, 0.1);
-  border: 1px solid rgba(255, 230, 0, 0.35);
-  color: #ffe600;
-  box-shadow: 0 0 10px rgba(255, 230, 0, 0.15);
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  color: #00f0ff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
 }
 
 .ranking-db-badge.cloud-disabled {
