@@ -4543,7 +4543,7 @@ class Game {
     } else if (t < 16.0) {
       this.sansDialogue = '💀 SANS: "sente seus pecados rastejando pelas costas? DESVIE DOS OSSOS!"';
     } else if (t < 26.0) {
-      this.sansDialogue = '💀 SANS: "GASTER BLASTERS DUPLOS! MIRA DE 0.2s! VAI AGUENTAR?!"';
+      this.sansDialogue = '💀 SANS: "GASTER BLASTERS DUPLOS! MIRA DE 0.4s! VAI AGUENTAR?!"';
     } else if (t < 33.0) {
       this.sansDialogue = '💀 SANS: "TELECINESE TOTAL! CONTROLE DE GRAVIDADE!"';
     } else if (t < 46.0) {
@@ -4627,10 +4627,10 @@ class Game {
       }
     }
 
-    // 3. GASTER BLASTERS SNIPERS DUPLOS (16s - 26s) - 2 Blasters a cada 0.70s!
+    // 3. GASTER BLASTERS SNIPERS DUPLOS (16s - 26s) - 2 Blasters com delay de mira de 0.4s!
     if (t >= 16.0 && t < 26.0) {
       this.sansBlasterTimer = (this.sansBlasterTimer || 0) + dt;
-      if (this.sansBlasterTimer >= 0.70) {
+      if (this.sansBlasterTimer >= 0.85) {
         this.sansBlasterTimer = 0;
         this.triggerSansTargetBlastersDouble();
       }
@@ -4800,17 +4800,20 @@ class Game {
 
       const angle = Math.atan2(this.player.y - sy, this.player.x - sx);
 
+      const trackFollowTime = 0.35 + idx * 0.05;
+      const trackLockDelay = 0.40; // Delay aumentado para 0.4s apenas na fase do Sam conforme solicitado
+
       this.addLaser({
         x1: sx, y1: sy,
         x2: sx + Math.cos(angle) * 1400,
         y2: sy + Math.sin(angle) * 1400,
         currentAngle: angle,
         turnSpeed: 3.2,
-        warningDuration: 0.45 + idx * 0.05,
+        warningDuration: trackFollowTime + trackLockDelay,
         fireDuration: 0.35,
         thickness: 34,
         isTracking: true,
-        trackLockDelay: 0.18,
+        trackLockDelay: trackLockDelay,
         isGasterBlaster: true,
         color: '#00f0ff',
         warningRgb: '0, 240, 255'
