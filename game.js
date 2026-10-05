@@ -21,7 +21,8 @@ const SKINS = {
   gold: { name: 'Ouro Solar', color: '#ffe600', price: 200 },
   crimson: { name: 'Fúria Carmesim', color: '#ff0055', price: 250 },
   emerald: { name: 'Matrix Esmeralda', color: '#00ffa3', price: 300 },
-  purple: { name: 'Hiperdrive Roxo', color: '#b537f2', price: 350 }
+  purple: { name: 'Hiperdrive Roxo', color: '#b537f2', price: 350 },
+  sans: { name: 'Olho de Sans 💀', color: '#00f0ff', price: 500 }
 };
 
 // Dicionário de Melhorias Roguelite da Rodada (Nível 1 a 5 - Resetam ao morrer)
@@ -361,6 +362,70 @@ class SoundController {
     osc2.start();
     osc2.stop(this.ctx.currentTime + 0.35);
   }
+
+  // --- EFEITOS SONOROS DE SANS (UNDERTALE) ---
+  playSansMegalovania() {
+    if (!this.enabled || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    // O lendário riff de 4 notas de Megalovania: D4, D4, D5, A4, Ab4, G4, F4, D4, F4, G4
+    const notes = [
+      { f: 293.66, t: 0.00, d: 0.11 }, // D4
+      { f: 293.66, t: 0.12, d: 0.11 }, // D4
+      { f: 587.33, t: 0.24, d: 0.22 }, // D5
+      { f: 440.00, t: 0.48, d: 0.30 }, // A4
+      { f: 415.30, t: 0.82, d: 0.18 }, // Ab4
+      { f: 392.00, t: 1.04, d: 0.18 }, // G4
+      { f: 349.23, t: 1.26, d: 0.18 }, // F4
+      { f: 293.66, t: 1.48, d: 0.12 }, // D4
+      { f: 349.23, t: 1.62, d: 0.12 }, // F4
+      { f: 392.00, t: 1.76, d: 0.25 }  // G4
+    ];
+
+    notes.forEach(n => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(n.f, now + n.t);
+      gain.gain.setValueAtTime(0.18, now + n.t);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + n.t + n.d);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now + n.t);
+      osc.stop(now + n.t + n.d);
+    });
+  }
+
+  playGasterBlasterCharge() {
+    if (!this.enabled || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(140, now);
+    osc.frequency.exponentialRampToValueAtTime(750, now + 0.35);
+    gain.gain.setValueAtTime(0.20, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.35);
+  }
+
+  playSansSlam() {
+    if (!this.enabled || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(380, now);
+    osc.frequency.exponentialRampToValueAtTime(45, now + 0.20);
+    gain.gain.setValueAtTime(0.28, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.20);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.20);
+  }
 }
 
 const sounds = new SoundController();
@@ -433,6 +498,8 @@ class Player {
     // Tiro a Laser (Bala Perfurante - 5s de recarga)
     this.shootCooldownMax = 5.0;
     this.shootCooldownTimer = 0;
+    this.isBlueSoul = false;
+    this.blueSoulTimer = 0;
 
     // Rastro visual (Afterimage)
     this.trail = [];
@@ -451,6 +518,8 @@ class Player {
     this.shootCooldownTimer = 0;
     this.isDashing = false;
     this.dashTimer = 0;
+    this.isBlueSoul = false;
+    this.blueSoulTimer = 0;
     this.trail = [];
     this.nameTag = null;
   }
@@ -571,6 +640,10 @@ class Player {
       this.shootCooldownTimer -= dt;
       if (this.shootCooldownTimer < 0) this.shootCooldownTimer = 0;
     }
+    if (this.isBlueSoul && this.blueSoulTimer > 0) {
+      this.blueSoulTimer -= dt;
+      if (this.blueSoulTimer <= 0) this.isBlueSoul = false;
+    }
 
     // Física de Movimento
     if (this.isDashing) {
@@ -684,6 +757,18 @@ class Player {
     ctx.fill();
 
     ctx.restore();
+
+    // Alma Azul de Undertale (Gravidade de Sans)
+    if (this.isBlueSoul) {
+      ctx.save();
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = '#0055ff';
+      ctx.shadowBlur = 12;
+      ctx.fillText('💙', this.x, this.y - 20);
+      ctx.restore();
+    }
 
     // Etiqueta com Nome/ID no Multiplayer X1
     if (this.nameTag) {
@@ -859,14 +944,28 @@ class Laser {
     this.targetPlayer = options.targetPlayer || 'p1'; // 'p1' ou 'p2' no multiplayer
     this.rawOptions = options; // Armazena opções para sincronização de rede
 
+    // Recursos Especiais de Sans (Undertale)
+    this.isGasterBlaster = options.isGasterBlaster || false;
+    this.isBone = options.isBone || false;
+    this.orbitRadius = options.orbitRadius || 0;
+    this.orbitAngle = options.orbitAngle || 0;
+    this.beamAngleOffset = options.beamAngleOffset !== undefined ? options.beamAngleOffset : 0;
+
     sounds.playLaserWarning();
   }
 
   update(dt, playerX, playerY, p2X, p2Y) {
     this.timer += dt;
 
-    // Se for rotativo
-    if (this.rotSpeed !== 0 && this.centerAnchor) {
+    // Se for rotativo com órbita circular (ex: Círculo dos Gaster Blasters de Sans)
+    if (this.rotSpeed !== 0 && this.centerAnchor && this.orbitRadius) {
+      this.orbitAngle = (this.orbitAngle || 0) + this.rotSpeed * dt;
+      this.x1 = this.centerAnchor.x + Math.cos(this.orbitAngle) * this.orbitRadius;
+      this.y1 = this.centerAnchor.y + Math.sin(this.orbitAngle) * this.orbitRadius;
+      const fireAngle = this.orbitAngle + (this.beamAngleOffset !== undefined ? this.beamAngleOffset : Math.PI);
+      this.x2 = this.x1 + Math.cos(fireAngle) * this.length;
+      this.y2 = this.y1 + Math.sin(fireAngle) * this.length;
+    } else if (this.rotSpeed !== 0 && this.centerAnchor) {
       this.angle += this.rotSpeed * dt;
       this.x1 = this.centerAnchor.x;
       this.y1 = this.centerAnchor.y;
@@ -1044,6 +1143,107 @@ class Laser {
       ctx.moveTo(this.x1, this.y1);
       ctx.lineTo(this.x2, this.y2);
       ctx.stroke();
+    }
+
+    // Renderiza Cabeça do Gaster Blaster na origem (x1, y1)
+    if (this.isGasterBlaster) {
+      const blasterAngle = Math.atan2(this.y2 - this.y1, this.x2 - this.x1);
+      ctx.save();
+      ctx.translate(this.x1, this.y1);
+      ctx.rotate(blasterAngle);
+
+      const isFiring = (this.state === 'FIRING');
+      const isWarning = (this.state === 'WARNING');
+      const scale = 1.3;
+      ctx.scale(scale, scale);
+
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = isFiring ? 25 : 12;
+
+      // Crânio Superior
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#111116';
+      ctx.lineWidth = 1.6;
+
+      ctx.beginPath();
+      ctx.moveTo(-18, -12);
+      ctx.lineTo(-6, -18);
+      ctx.lineTo(16, -14);
+      ctx.lineTo(26, -4);
+      ctx.lineTo(18, 0);
+      ctx.lineTo(-12, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Chifres do Blaster
+      ctx.beginPath();
+      ctx.moveTo(-18, -12);
+      ctx.lineTo(-28, -20);
+      ctx.lineTo(-22, -10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Mandíbula Inferior (abre ao disparar)
+      ctx.save();
+      ctx.rotate(isFiring ? 0.38 : 0.08);
+      ctx.beginPath();
+      ctx.moveTo(-12, 2);
+      ctx.lineTo(18, 2);
+      ctx.lineTo(24, 9);
+      ctx.lineTo(12, 15);
+      ctx.lineTo(-6, 13);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // Cavidade ocular direita
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.ellipse(4, -6, 4, 6, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cavidade ocular esquerda
+      ctx.beginPath();
+      ctx.ellipse(14, -4, 4.5, 6.5, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pupila com Fogo Místico de Sans (Ciano / Amarelo)
+      const eyeColor = (Math.floor(Date.now() / 120) % 2 === 0) ? '#00f0ff' : '#ffe600';
+      ctx.fillStyle = eyeColor;
+      ctx.shadowColor = eyeColor;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(14, -4, isFiring ? 3.5 : 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Fagulhas de energia na boca durante o carregamento
+      if (isWarning) {
+        const p = this.timer / this.warningDuration;
+        ctx.fillStyle = '#00f0ff';
+        ctx.shadowColor = '#00f0ff';
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        ctx.arc(22, 2, 3 + p * 7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    // Renderiza Ossos de Undertale nas pontas
+    if (this.isBone) {
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(this.x1, this.y1, this.thickness * 0.7, 0, Math.PI * 2);
+      ctx.arc(this.x2, this.y2, this.thickness * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
 
     ctx.restore();
@@ -1439,6 +1639,15 @@ class Game {
         sounds.init();
         this.hideModeModal();
         this.startGame();
+      });
+    }
+
+    const btnModeSans = document.getElementById('btn-mode-sans');
+    if (btnModeSans) {
+      btnModeSans.addEventListener('click', () => {
+        sounds.init();
+        this.hideModeModal();
+        this.startSansBossDirect();
       });
     }
 
@@ -3025,6 +3234,10 @@ class Game {
         this.domBannerSub.textContent = `ZONA CRÍTICA: Reflexos no Limite Absoluto!`;
       } else if (this.level === 5) {
         this.domBannerSub.textContent = `⚡ TEMPESTADE CIBERNÉTICA: CHUVA DE LASERS POR 5 SEGUNDOS! ⚡`;
+      } else if (this.level === 10) {
+        this.domBannerTitle.textContent = `💀 FASE 10: SANS (UNDERTALE) 💀`;
+        this.domBannerSub.textContent = `VOCÊ VAI TER UM TEMPO RUIM! Sobreviva aos Gaster Blasters e ao Círculo Giratório!`;
+        sounds.playSansMegalovania();
       } else {
         this.domBannerSub.textContent = `SOBREVIVÊNCIA MÁXIMA: Nível de Ameaça Extremo!`;
       }
@@ -3039,6 +3252,8 @@ class Game {
     if (this.level === 5) {
       this.phase5RainTriggered = false;
       this.phase5RainCooldown = 0.5;
+    } else if (this.level === 10) {
+      this.initSansBossPhase();
     }
 
     this.lasers = [];
@@ -3611,6 +3826,11 @@ class Game {
       }
     }
 
+    // Evento Especial da Fase 10: Boss Sans de Undertale (Modo Solo)
+    if (!this.isMultiplayer && this.level === 10 && this.gameState === STATE.PLAYING && this.levelTransitionTimer <= 0) {
+      this.updateSansBossPhase(dt);
+    }
+
     // Processamento da Chuva de Lasers Rápida (5 segundos de feixes rápidos)
     if (!this.isMultiplayer && this.laserRainActive) {
       this.laserRainTimer -= dt;
@@ -3646,7 +3866,7 @@ class Game {
     // Se estiver em transição de fase (pausa tática pós-anúncio), aguarda antes de novos disparos
     if (!this.isMultiplayer && this.levelTransitionTimer > 0) {
       this.levelTransitionTimer -= dt;
-    } else if (!this.laserRainActive && (!this.isMultiplayer || this.isHost)) {
+    } else if (!this.laserRainActive && (!this.isMultiplayer || this.isHost) && this.level !== 10) {
       // Spawners de Lasers com cadência equilibrada e justa (pausado durante a chuva rápida de 5s)
       this.laserSpawnTimer += dt;
       let currentSpawnRate = 1.30;
@@ -3932,6 +4152,10 @@ class Game {
     if (this.level === 2) {
       gridColor = 'rgba(181, 55, 242, 0.06)';
       borderColor = 'rgba(181, 55, 242, 0.45)';
+    } else if (this.level === 10) {
+      // Estilo Monocromático de Undertale / Sans: Preto profundo e borda branca de batalha!
+      gridColor = 'rgba(0, 240, 255, 0.07)';
+      borderColor = 'rgba(255, 255, 255, 0.90)';
     } else if (this.level >= 3) {
       gridColor = 'rgba(255, 230, 0, 0.06)';
       borderColor = 'rgba(255, 230, 0, 0.50)';
@@ -3983,6 +4207,11 @@ class Game {
       }
     }
 
+    // HUD e Visual do Boss Sans na Fase 10
+    if (!this.isMultiplayer && this.level === 10 && this.gameState === STATE.PLAYING) {
+      this.drawSansBossHUD();
+    }
+
     // Alerta Visual de Chuva de Lasers Rápida (Fase 5)
     if (this.laserRainActive && this.laserRainTimer > 0) {
       this.ctx.save();
@@ -3994,6 +4223,371 @@ class Game {
       this.ctx.fillText(`⚡ CHUVA DE LASERS: ${Math.max(0, this.laserRainTimer).toFixed(1)}s ⚡`, VIRTUAL_WIDTH / 2, 75);
       this.ctx.restore();
     }
+
+    this.ctx.restore();
+  }
+
+  // ==========================================
+  // SANS BOSS FIGHT (FASE 10 - UNDERTALE)
+  // ==========================================
+
+  startSansBossDirect() {
+    this.isMultiplayer = false;
+    this.gameState = STATE.PLAYING;
+    this.score = 45000;
+    this.survivalTime = 0;
+    this.level = 10;
+    this.levelTransitionTimer = 0;
+    this.player.reset(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
+    this.player.lives = 3;
+    this.lasers = [];
+    this.bullets = [];
+    this.pickups = [];
+    this.particles = [];
+
+    // Upgrades reforçados para o duelo épico
+    this.upgrades = {
+      energyMagnet: 3,
+      dashTurbine: 3,
+      shieldCore: 2,
+      creditBoost: 3
+    };
+    this.player.shieldActive = true;
+    this.applyUpgradesToPlayer();
+
+    if (this.domModeModal) this.domModeModal.classList.add('hidden');
+    if (this.domMenuScreen) this.domMenuScreen.classList.add('hidden');
+    if (this.domGameOverScreen) this.domGameOverScreen.classList.add('hidden');
+    if (this.domHUD) this.domHUD.classList.remove('hidden');
+
+    this.initSansBossPhase();
+  }
+
+  initSansBossPhase() {
+    this.sansTimer = 0;
+    this.sansStep1Triggered = false;
+    this.sansStep2Triggered = false;
+    this.sansCircleTriggered = false;
+    this.sansVictoryTriggered = false;
+    this.sansBoneTimer = 0;
+    this.sansBlasterTimer = 0;
+    this.sansGravityTimer = 0;
+    this.sansDialogue = '💀 SANS: "é um belo dia lá fora..."';
+    this.sansDialogueTimer = 3.0;
+
+    sounds.playSansMegalovania();
+    this.showLevelBanner('★ FASE 10: SANS (UNDERTALE) ★', '💀 "VOCÊ VAI TER UM TEMPO RUIM!" | Sobreviva aos Gaster Blasters!', 3000);
+  }
+
+  updateSansBossPhase(dt) {
+    this.sansTimer += dt;
+    const t = this.sansTimer;
+
+    // Diálogos clássicos de Sans
+    if (t < 2.8) {
+      this.sansDialogue = '💀 SANS: "é um belo dia lá fora. pássaros cantando, flores desabrochando..."';
+    } else if (t < 4.8) {
+      this.sansDialogue = '💀 SANS: "em dias como esses, crianças como você..."';
+    } else if (t < 7.0) {
+      this.sansDialogue = '💀 SANS: "DEVERIAM QUEIMAR NO INFERNO!"';
+    } else if (t < 14.0) {
+      this.sansDialogue = '💀 SANS: "você gosta de desviar, né? vamos ver se aguenta os ossos!"';
+    } else if (t < 22.0) {
+      this.sansDialogue = '💀 SANS: "cuidado com os Gaster Blasters! a mira tá travada!"';
+    } else if (t < 25.0) {
+      this.sansDialogue = '💀 SANS: "ainda vivo? então é hora do MEU ATAQUE FINAL."';
+    } else if (t < 37.0) {
+      this.sansDialogue = '💀 SANS: "CÍRCULO DOS GASTER BLASTERS! GIRE COM ELES!"';
+    } else if (t < 43.0) {
+      this.sansDialogue = '💀 SANS: "ufa... tá suando aí? eu já tô ficando cansado..."';
+    } else if (t < 47.0) {
+      this.sansDialogue = '💀 SANS: "sabe o que vem agora? meu ataque especial... absolutamente nada."';
+    }
+
+    // Spawna orbes de emergência em momentos estratégicos
+    if ((Math.abs(t - 12.0) < dt || Math.abs(t - 24.0) < dt || Math.abs(t - 36.0) < dt) && this.pickups.length < 2) {
+      this.spawnPickup();
+    }
+
+    // 1. PRIMEIRO ATAQUE (0s - 7s): Slam para baixo + Ossos no chão + Blasters gigantes
+    if (t >= 3.0 && t < 3.2 && !this.sansStep1Triggered) {
+      this.sansStep1Triggered = true;
+      this.triggerSansGravitySlam('DOWN');
+      this.addLaser({
+        x1: 220, y1: 0, x2: 220, y2: VIRTUAL_HEIGHT,
+        warningDuration: 0.50, fireDuration: 0.40, thickness: 30,
+        isGasterBlaster: true, color: '#00f0ff', warningRgb: '0, 240, 255'
+      });
+      this.addLaser({
+        x1: 680, y1: 0, x2: 680, y2: VIRTUAL_HEIGHT,
+        warningDuration: 0.50, fireDuration: 0.40, thickness: 30,
+        isGasterBlaster: true, color: '#00f0ff', warningRgb: '0, 240, 255'
+      });
+    }
+
+    if (t >= 5.0 && t < 5.2 && !this.sansStep2Triggered) {
+      this.sansStep2Triggered = true;
+      this.triggerSansGravitySlam('RIGHT');
+      this.addLaser({
+        x1: 0, y1: 180, x2: VIRTUAL_WIDTH, y2: 180,
+        warningDuration: 0.45, fireDuration: 0.40, thickness: 30,
+        isGasterBlaster: true, color: '#00f0ff', warningRgb: '0, 240, 255'
+      });
+      this.addLaser({
+        x1: 0, y1: 440, x2: VIRTUAL_WIDTH, y2: 440,
+        warningDuration: 0.45, fireDuration: 0.40, thickness: 30,
+        isGasterBlaster: true, color: '#00f0ff', warningRgb: '0, 240, 255'
+      });
+    }
+
+    // 2. CORREDOR DE OSSOS (7s - 15s)
+    if (t >= 7.0 && t < 15.0) {
+      this.sansBoneTimer = (this.sansBoneTimer || 0) + dt;
+      if (this.sansBoneTimer >= 1.25) {
+        this.sansBoneTimer = 0;
+        this.triggerSansBoneWave();
+      }
+    }
+
+    // 3. GASTER BLASTERS MIRADOS (15s - 24s)
+    if (t >= 15.0 && t < 24.0) {
+      this.sansBlasterTimer = (this.sansBlasterTimer || 0) + dt;
+      if (this.sansBlasterTimer >= 1.15) {
+        this.sansBlasterTimer = 0;
+        this.triggerSansTargetBlaster();
+      }
+    }
+
+    // 4. O ATAQUE FINAL: CÍRCULO GIRATÓRIO DE GASTER BLASTERS (25s - 37s)
+    if (t >= 25.0 && !this.sansCircleTriggered) {
+      this.sansCircleTriggered = true;
+      this.triggerSansSpinningCircle(11.0);
+    }
+
+    // 5. CAOS DE GRAVIDADE FINAL (37s - 43s)
+    if (t >= 37.0 && t < 43.0) {
+      this.sansGravityTimer = (this.sansGravityTimer || 0) + dt;
+      if (this.sansGravityTimer >= 1.35) {
+        this.sansGravityTimer = 0;
+        const dirs = ['DOWN', 'UP', 'LEFT', 'RIGHT'];
+        const randomDir = dirs[Math.floor(Math.random() * dirs.length)];
+        this.triggerSansGravitySlam(randomDir);
+      }
+    }
+
+    // 6. VITÓRIA CONTRA SANS (47s+)
+    if (t >= 47.0 && !this.sansVictoryTriggered) {
+      this.sansVictoryTriggered = true;
+      this.triggerSansVictory();
+    }
+  }
+
+  triggerSansGravitySlam(dir) {
+    sounds.playSansSlam();
+    this.screenShake = 16;
+    this.player.isBlueSoul = true;
+    this.player.blueSoulTimer = 1.3;
+
+    const slamSpeed = 680;
+    if (dir === 'DOWN') {
+      this.player.vy = slamSpeed;
+      for (let k = 0; k < 25; k++) {
+        this.particles.push(new Particle(this.player.x, this.player.y, '#0055ff', (Math.random() - 0.5) * 120, -100 - Math.random() * 180, 0.5, 3));
+      }
+      this.addLaser({
+        x1: 20, y1: VIRTUAL_HEIGHT - 35, x2: VIRTUAL_WIDTH - 20, y2: VIRTUAL_HEIGHT - 35,
+        warningDuration: 0.65, fireDuration: 0.35, thickness: 22,
+        isBone: true, color: '#ffffff', warningRgb: '0, 150, 255'
+      });
+    } else if (dir === 'UP') {
+      this.player.vy = -slamSpeed;
+      for (let k = 0; k < 25; k++) {
+        this.particles.push(new Particle(this.player.x, this.player.y, '#0055ff', (Math.random() - 0.5) * 120, 100 + Math.random() * 180, 0.5, 3));
+      }
+      this.addLaser({
+        x1: 20, y1: 35, x2: VIRTUAL_WIDTH - 20, y2: 35,
+        warningDuration: 0.65, fireDuration: 0.35, thickness: 22,
+        isBone: true, color: '#ffffff', warningRgb: '0, 150, 255'
+      });
+    } else if (dir === 'LEFT') {
+      this.player.vx = -slamSpeed;
+      for (let k = 0; k < 25; k++) {
+        this.particles.push(new Particle(this.player.x, this.player.y, '#0055ff', 100 + Math.random() * 180, (Math.random() - 0.5) * 120, 0.5, 3));
+      }
+      this.addLaser({
+        x1: 35, y1: 20, x2: 35, y2: VIRTUAL_HEIGHT - 20,
+        warningDuration: 0.65, fireDuration: 0.35, thickness: 22,
+        isBone: true, color: '#ffffff', warningRgb: '0, 150, 255'
+      });
+    } else if (dir === 'RIGHT') {
+      this.player.vx = slamSpeed;
+      for (let k = 0; k < 25; k++) {
+        this.particles.push(new Particle(this.player.x, this.player.y, '#0055ff', -100 - Math.random() * 180, (Math.random() - 0.5) * 120, 0.5, 3));
+      }
+      this.addLaser({
+        x1: VIRTUAL_WIDTH - 35, y1: 20, x2: VIRTUAL_WIDTH - 35, y2: VIRTUAL_HEIGHT - 20,
+        warningDuration: 0.65, fireDuration: 0.35, thickness: 22,
+        isBone: true, color: '#ffffff', warningRgb: '0, 150, 255'
+      });
+    }
+  }
+
+  triggerSansBoneWave() {
+    const gapCenter = 130 + Math.random() * (VIRTUAL_HEIGHT - 260);
+    const gapSize = 135;
+
+    this.addLaser({
+      x1: 0, y1: gapCenter - gapSize / 2,
+      x2: VIRTUAL_WIDTH, y2: gapCenter - gapSize / 2,
+      warningDuration: 0.70, fireDuration: 0.40, thickness: 18,
+      isBone: true, color: '#ffffff', warningRgb: '255, 255, 255'
+    });
+
+    this.addLaser({
+      x1: 0, y1: gapCenter + gapSize / 2,
+      x2: VIRTUAL_WIDTH, y2: gapCenter + gapSize / 2,
+      warningDuration: 0.70, fireDuration: 0.40, thickness: 18,
+      isBone: true, color: '#ffffff', warningRgb: '255, 255, 255'
+    });
+  }
+
+  triggerSansTargetBlaster() {
+    sounds.playGasterBlasterCharge();
+    const side = Math.floor(Math.random() * 4);
+    let sx = 0, sy = 0;
+    if (side === 0) { sx = Math.random() * VIRTUAL_WIDTH; sy = 0; }
+    else if (side === 1) { sx = VIRTUAL_WIDTH; sy = Math.random() * VIRTUAL_HEIGHT; }
+    else if (side === 2) { sx = Math.random() * VIRTUAL_WIDTH; sy = VIRTUAL_HEIGHT; }
+    else { sx = 0; sy = Math.random() * VIRTUAL_HEIGHT; }
+
+    const angle = Math.atan2(this.player.y - sy, this.player.x - sx);
+
+    this.addLaser({
+      x1: sx, y1: sy,
+      x2: sx + Math.cos(angle) * 1200,
+      y2: sy + Math.sin(angle) * 1200,
+      currentAngle: angle,
+      turnSpeed: 1.8,
+      warningDuration: 0.90,
+      fireDuration: 0.35,
+      thickness: 28,
+      isTracking: true,
+      trackLockDelay: 0.20,
+      isGasterBlaster: true,
+      color: '#00f0ff',
+      warningRgb: '0, 240, 255'
+    });
+  }
+
+  triggerSansSpinningCircle(duration = 11.0) {
+    sounds.playGasterBlasterCharge();
+    this.screenShake = 14;
+    this.showLevelBanner('💀 ATAQUE FINAL: CÍRCULO DE BLASTERS! 💀', 'Gire com os Gaster Blasters para sobreviver!', 2500);
+
+    const center = { x: VIRTUAL_WIDTH / 2, y: VIRTUAL_HEIGHT / 2 };
+    const numBlasters = 6;
+    const orbitRadius = 260;
+    const rotSpeed = 0.95; // Rotação justa e dinâmica em rad/s
+
+    for (let i = 0; i < numBlasters; i++) {
+      const baseAngle = (i / numBlasters) * Math.PI * 2;
+      this.addLaser({
+        centerAnchor: center,
+        orbitRadius: orbitRadius,
+        orbitAngle: baseAngle,
+        rotSpeed: rotSpeed,
+        beamAngleOffset: Math.PI,
+        length: 750,
+        warningDuration: 0.90,
+        fireDuration: duration,
+        thickness: 24,
+        isGasterBlaster: true,
+        color: '#00f0ff',
+        warningRgb: '0, 240, 255'
+      });
+    }
+  }
+
+  triggerSansVictory() {
+    this.lasers = [];
+    sounds.playLevelUp();
+    this.screenShake = 12;
+    this.showLevelBanner('🏆 VOCÊ DERROTOU O SANS! 🏆', 'Sobreviveu à rota mais difícil de Undertale! (+1000 🪙)', 4000);
+
+    this.addCredits(1000);
+
+    if (!this.ownedSkins.includes('sans')) {
+      this.ownedSkins.push('sans');
+      localStorage.setItem('laser_reflex_owned_skins', JSON.stringify(this.ownedSkins));
+      if (this.db) {
+        this.db.saveProgress({ unlockedSkins: this.ownedSkins });
+      }
+    }
+
+    for (let i = 0; i < 6; i++) {
+      setTimeout(() => {
+        this.spawnPickup();
+      }, i * 250);
+    }
+  }
+
+  drawSansBossHUD() {
+    this.ctx.save();
+
+    // 1. Barra de Sobrevivência do Boss Sans no Topo
+    const barWidth = 320;
+    const barHeight = 12;
+    const barX = (VIRTUAL_WIDTH - barWidth) / 2;
+    const barY = 28;
+
+    const totalBossTime = 47.0;
+    const progress = Math.min(1.0, this.sansTimer / totalBossTime);
+
+    this.ctx.fillStyle = 'rgba(15, 18, 30, 0.88)';
+    this.ctx.strokeStyle = '#ffffff';
+    this.ctx.lineWidth = 1.8;
+    this.ctx.fillRect(barX, barY, barWidth, barHeight);
+    this.ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+    const fillWidth = barWidth * (1.0 - progress);
+    this.ctx.fillStyle = (Math.floor(Date.now() / 140) % 2 === 0) ? '#00f0ff' : '#ffe600';
+    this.ctx.shadowColor = '#00f0ff';
+    this.ctx.shadowBlur = 10;
+    this.ctx.fillRect(barX, barY, fillWidth, barHeight);
+
+    // Texto de Status
+    this.ctx.font = 'bold 12px "Orbitron", sans-serif';
+    this.ctx.fillStyle = '#ffffff';
+    this.ctx.textAlign = 'center';
+    this.ctx.shadowColor = '#00f0ff';
+    this.ctx.shadowBlur = 8;
+    this.ctx.fillText(`💀 SANS (UNDERTALE) - TEMPO RESTANTE: ${Math.max(0, totalBossTime - this.sansTimer).toFixed(1)}s`, VIRTUAL_WIDTH / 2, 20);
+
+    // Diálogo Flutuante de Sans
+    if (this.sansDialogue) {
+      this.ctx.font = 'bold 14px "Rajdhani", sans-serif';
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.shadowColor = '#000000';
+      this.ctx.shadowBlur = 6;
+      this.ctx.fillText(this.sansDialogue, VIRTUAL_WIDTH / 2, 58);
+    }
+
+    // 2. Olho místico de Sans no fundo da arena
+    const eyeX = VIRTUAL_WIDTH / 2;
+    const eyeY = VIRTUAL_HEIGHT / 2 - 20;
+    const pulse = 0.8 + 0.2 * Math.sin(Date.now() * 0.005);
+    this.ctx.globalAlpha = 0.12 * pulse;
+    this.ctx.fillStyle = (Math.floor(Date.now() / 100) % 2 === 0) ? '#00f0ff' : '#ffe600';
+    this.ctx.shadowColor = '#00f0ff';
+    this.ctx.shadowBlur = 40;
+    this.ctx.beginPath();
+    this.ctx.arc(eyeX, eyeY, 65, 0, Math.PI * 2);
+    this.ctx.fill();
+
+    this.ctx.font = '60px sans-serif';
+    this.ctx.textAlign = 'center';
+    this.ctx.textBaseline = 'middle';
+    this.ctx.fillText('💀', eyeX, eyeY);
 
     this.ctx.restore();
   }

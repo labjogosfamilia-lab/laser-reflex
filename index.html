@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Laser Reflex - Sobrevivência Neon</title>
-  <link rel="stylesheet" href="style.css?v=9.6">
+  <link rel="stylesheet" href="style.css?v=9.7">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -258,6 +258,15 @@
               <div class="item-desc">350 Créditos</div>
               <button class="item-action-btn" data-skin-id="purple" data-price="350">350 🪙</button>
             </div>
+
+            <div class="shop-item-card" data-skin="sans">
+              <div class="item-preview" style="background: radial-gradient(circle, #00f0ff 0%, #000000 100%);">
+                <span class="preview-drone" style="color: #00f0ff; text-shadow: 0 0 10px #ffe600;">💀</span>
+              </div>
+              <div class="item-name">Olho de Sans 💀</div>
+              <div class="item-desc">Fase 10 (ou 500 🪙)</div>
+              <button class="item-action-btn" data-skin-id="sans" data-price="500">500 🪙</button>
+            </div>
           </div>
         </div>
 
@@ -315,6 +324,14 @@
             <div class="mode-info">
               <strong class="mode-title">JOGAR SOLO (CLÁSSICO)</strong>
               <span class="mode-desc">Partida individual arcade com progressão de fases e recorde.</span>
+            </div>
+          </button>
+
+          <button id="btn-mode-sans" class="mode-card-btn highlight-sans">
+            <span class="mode-icon">💀</span>
+            <div class="mode-info">
+              <strong class="mode-title">DESAFIO SANS (FASE 10)</strong>
+              <span class="mode-desc">A fase mais difícil de Undertale! Gaster Blasters, Ossos e o Círculo Giratório!</span>
             </div>
           </button>
         </div>
@@ -539,9 +556,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <!-- Scripts do Jogo -->
-  <script src="database.js?v=9.6"></script>
+  <script src="database.js?v=9.7"></script>
   <script src="peerjs.min.js"></script>
-  <script src="network.js?v=9.6"></script>
-  <script src="game.js?v=9.6"></script>
+  <script src="network.js?v=9.7"></script>
+  <script src="game.js?v=9.7"></script>
 </body>
 </html>

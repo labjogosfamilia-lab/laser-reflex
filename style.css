@@ -1258,6 +1258,20 @@ canvas {
   box-shadow: 0 0 22px rgba(181, 55, 242, 0.35);
 }
 
+.highlight-sans {
+  border-color: rgba(0, 240, 255, 0.6);
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(10, 10, 25, 0.9) 100%);
+}
+.highlight-sans .mode-title {
+  color: #00f0ff;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.7);
+}
+.highlight-sans:hover {
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.22) 0%, rgba(255, 230, 0, 0.12) 100%);
+  border-color: #ffe600;
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.5), 0 0 12px rgba(255, 230, 0, 0.35);
+}
+
 /* Modal Lobby (Sala Criada) */
 .lobby-card {
   max-width: 520px;
