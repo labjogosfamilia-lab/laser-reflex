@@ -524,6 +524,8 @@ class Player {
     this.blueSoulTimer = 0;
     this.slamVx = 0;
     this.slamVy = 0;
+    this.baseSpeed = 240;
+    this.dashSpeedMultiplier = 2.8;
     this.trail = [];
     this.nameTag = null;
   }
@@ -3091,13 +3093,27 @@ class Game {
   }
 
   applyUpgradesToPlayer() {
-    // Turbina de Dash (2.0s -> 0.70s)
+    // 1. Turbina de Dash (Nível 10: recarga ultra veloz de 0.35s + 3.2x velocidade de dash)
     const dashLvl = this.upgrades.dashTurbine || 0;
-    this.player.dashCooldownMax = Math.max(0.70, 2.0 - dashLvl * 0.26);
+    if (dashLvl >= 10) {
+      this.player.dashCooldownMax = 0.35;
+      this.player.dashSpeedMultiplier = 3.2;
+    } else {
+      this.player.dashCooldownMax = Math.max(0.70, 2.0 - dashLvl * 0.26);
+      this.player.dashSpeedMultiplier = 2.8;
+    }
 
-    // Núcleo de Escudo (imunidade ampliada)
+    // 2. Núcleo de Escudo (imunidade ampliada: Nível 10 = 3.6s)
     const shieldLvl = this.upgrades.shieldCore || 0;
     this.player.invulnerableDuration = 1.6 + shieldLvl * 0.20;
+
+    // 3. Ímã de Energia (Nível 10: Calibração de propulsores aumenta velocidade base para 280px/s)
+    const magnetLvl = this.upgrades.energyMagnet || 0;
+    if (magnetLvl >= 10) {
+      this.player.baseSpeed = 280;
+    } else {
+      this.player.baseSpeed = 240;
+    }
   }
 
   updateRunCreditsDisplay() {
@@ -4006,8 +4022,9 @@ class Game {
         const tookHit = this.player.takeDamage(this.particles);
         if (tookHit) {
           if (this.level === 10) {
-            // KR (Karmic Retribution): Invulnerabilidade brutalmente reduzida para 0.45s no duelo com Sans!
-            this.player.invulnerableTimer = 0.45;
+            // KR (Karmic Retribution): Com Núcleo de Escudo Nível 10, protege por 0.75s (ao invés de 0.45s)
+            const shieldLvl = this.upgrades.shieldCore || 0;
+            this.player.invulnerableTimer = (shieldLvl >= 10) ? 0.75 : 0.45;
             this.screenShake = 18;
           } else {
             this.screenShake = 12;
@@ -4132,8 +4149,8 @@ class Game {
       const magnetLvl = this.upgrades.energyMagnet || 0;
       if (magnetLvl > 0) {
         const mDist = Math.hypot(this.player.x - p.x, this.player.y - p.y);
-        const magnetRadius = 60 + magnetLvl * 25; // Nv 1: 85px ... Nv 10: 310px
-        const magnetSpeed = 130 + magnetLvl * 22;  // Nv 1: 152px/s ... Nv 10: 350px/s
+        const magnetRadius = 60 + magnetLvl * 28; // Nv 1: 88px ... Nv 10: 340px (atrai quase a tela toda!)
+        const magnetSpeed = 130 + magnetLvl * 24;  // Nv 1: 154px/s ... Nv 10: 370px/s
         if (mDist < magnetRadius && mDist > 1) {
           p.x += ((this.player.x - p.x) / mDist) * magnetSpeed * dt;
           p.y += ((this.player.y - p.y) / mDist) * magnetSpeed * dt;
@@ -4144,7 +4161,7 @@ class Game {
       const dist = Math.hypot(this.player.x - p.x, this.player.y - p.y);
       if (dist <= this.player.radius + p.radius) {
         const boostLvl = this.upgrades.creditBoost || 0;
-        const creditMult = 1 + boostLvl * 0.15; // +15% de moedas por nível
+        const creditMult = 1 + boostLvl * 0.20; // Nv 10: +200% de moedas (3x créditos!)
 
         if (p.type === 'ENERGY') {
           this.score += 350;
@@ -4346,14 +4363,15 @@ class Game {
     this.player.nameTag = null;
     this.player.skinColor = SKINS[this.equippedSkin]?.color || '#00f0ff';
 
-    // Upgrades reforçados para o duelo épico
+    // Todos os poderes no NÍVEL 10 para o duelo contra Sans (vida mantida em 3 corações)
     this.upgrades = {
-      energyMagnet: 3,
-      dashTurbine: 3,
-      shieldCore: 2,
-      creditBoost: 3
+      energyMagnet: 10,
+      dashTurbine: 10,
+      shieldCore: 10,
+      creditBoost: 10
     };
     this.player.shieldActive = true;
+    this.sansShieldRechargeTimer = 0;
     this.applyUpgradesToPlayer();
 
     // Fecha todas as telas sobrepostas e ativa a HUD de jogo
@@ -4391,8 +4409,19 @@ class Game {
     this.sansDialogue = '💀 SANS: "é um belo dia lá fora..."';
     this.sansDialogueTimer = 3.0;
 
+    // Garante todos os poderes no Nível 10 (menos a vida, que é mantida em 3 corações)
+    this.upgrades = {
+      energyMagnet: 10,
+      dashTurbine: 10,
+      shieldCore: 10,
+      creditBoost: 10
+    };
+    this.player.shieldActive = true;
+    this.sansShieldRechargeTimer = 0;
+    this.applyUpgradesToPlayer();
+
     sounds.playSansMegalovania();
-    this.showLevelBanner('★ FASE 10: SANS (MODO GENOCIDA INSANO) ★', '💀 "PREPARE-SE PARA UM TEMPO REALMENTE RUIM!" | Dano KR Ativo!', 3000);
+    this.showLevelBanner('★ FASE 10: SANS (MODO GENOCIDA) ★', '⚡ TODOS OS PODERES NO NÍVEL 10 ATIVADOS! | Sobreviva com suas 3 Vidas!', 3200);
   }
 
   updateSansBossPhase(dt) {
@@ -4418,6 +4447,19 @@ class Game {
       this.sansDialogue = '💀 SANS: "ÚLTIMO GOLPE: CERCO DE BLASTERS EM 360°! USE O DASH AGORA!"';
     } else if (t < 53.0) {
       this.sansDialogue = '💀 SANS: "argh... você... é insistente demais... zzz... zzz..."';
+    }
+
+    // Núcleo de Escudo Nível 10: Auto-regeneração de Escudo a cada 14s sem escudo!
+    if (!this.player.shieldActive) {
+      this.sansShieldRechargeTimer = (this.sansShieldRechargeTimer || 0) + dt;
+      if (this.sansShieldRechargeTimer >= 14.0) {
+        this.sansShieldRechargeTimer = 0;
+        this.player.shieldActive = true;
+        sounds.playShieldUp();
+        this.showLevelBanner('🛡️ ESCUDO NÍVEL 10 RESTAURADO! 🛡️', 'O Núcleo Quântico gerou uma nova barreira protetora!', 2000);
+      }
+    } else {
+      this.sansShieldRechargeTimer = 0;
     }
 
     // Spawna orbe de cura/escudo de emergência em momentos estratégicos
@@ -4792,13 +4834,21 @@ class Game {
     this.ctx.shadowBlur = 8;
     this.ctx.fillText(`💀 SANS (GENOCIDA) | SOBREVIVA: ${Math.max(0, totalBossTime - this.sansTimer).toFixed(1)}s | KR ATIVO`, VIRTUAL_WIDTH / 2, 19);
 
+    // 2. Indicador dos Poderes no Nível 10 (Vida mantida em 3 corações)
+    this.ctx.font = 'bold 11px "Orbitron", sans-serif';
+    this.ctx.fillStyle = '#ffe600';
+    this.ctx.textAlign = 'center';
+    this.ctx.shadowColor = '#ffe600';
+    this.ctx.shadowBlur = 6;
+    this.ctx.fillText(`⚡ PODERES NV.10: ⚡ Turbina 0.35s | 🧲 Super Ímã 340px | 🛡️ Auto-Escudo | 🪙 Moedas x3 | ♥ Vidas: ${this.player.lives}/3`, VIRTUAL_WIDTH / 2, 53);
+
     // Diálogo Flutuante de Sans
     if (this.sansDialogue) {
       this.ctx.font = 'bold 15px "Rajdhani", sans-serif';
       this.ctx.fillStyle = '#ffffff';
       this.ctx.shadowColor = '#000000';
       this.ctx.shadowBlur = 6;
-      this.ctx.fillText(this.sansDialogue, VIRTUAL_WIDTH / 2, 58);
+      this.ctx.fillText(this.sansDialogue, VIRTUAL_WIDTH / 2, 73);
     }
 
     // 2. Olho místico de Sans no fundo da arena
