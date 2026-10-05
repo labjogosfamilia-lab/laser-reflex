@@ -844,7 +844,7 @@ class Laser {
     this.timer = 0;
     this.state = 'WARNING'; // 'WARNING' | 'FIRING' | 'DONE'
     this.isTracking = options.isTracking || false; // Segue jogador antes de travar
-    this.trackLockDelay = options.trackLockDelay !== undefined ? options.trackLockDelay : 0.50; // Delay de meio segundo (0.50s) com mira travada
+    this.trackLockDelay = options.trackLockDelay !== undefined ? options.trackLockDelay : 0.20; // Delay de 0.2s com mira travada
     this.isLocked = false;
     this.lockSoundPlayed = false;
     this.lockedTargetX = options.x2 || 0;
@@ -874,7 +874,7 @@ class Laser {
       this.y2 = this.y1 + Math.sin(this.angle) * this.length;
     }
 
-    // Se for rastreador (Sniper): persegue APENAS durante o aviso e ANTES do delay de 0.5s
+    // Se for rastreador (Sniper): persegue APENAS durante o aviso e ANTES do delay de 0.2s
     if (this.state === 'WARNING' && this.isTracking) {
       const lockCutoff = Math.max(0.1, this.warningDuration - this.trackLockDelay);
 
@@ -912,7 +912,7 @@ class Laser {
         this.lockedTargetX = this.x1 + Math.cos(this.currentAngle) * dist;
         this.lockedTargetY = this.y1 + Math.sin(this.currentAngle) * dist;
       } else {
-        // Trava totalmente a mira pelo tempo do delay (0.50s) - NENHUM MOVIMENTO!
+        // Trava totalmente a mira pelo tempo do delay (0.20s) - NENHUM MOVIMENTO!
         if (!this.isLocked) {
           this.isLocked = true;
         }
@@ -965,7 +965,7 @@ class Laser {
 
     if (this.state === 'WARNING') {
       if (this.isLocked) {
-        // Alerta visual de mira travada com delay de 0.5s antes do disparo
+        // Alerta visual de mira travada com delay de 0.2s antes do disparo
         const flash = Math.floor(Date.now() / 60) % 2 === 0;
 
         ctx.strokeStyle = flash ? '#ffe600' : '#ff0055';
@@ -3286,7 +3286,7 @@ class Game {
       const initialAngle = targetAngle + angleOffset;
 
       const trackFollowTime = (this.level === 2) ? 1.05 : 0.85;
-      const trackLockDelay = 0.50; // Meio segundo de delay com mira travada em todas as fases
+      const trackLockDelay = 0.20; // Delay de 0.2s com mira travada em todas as fases
       const totalWarningTime = trackFollowTime + trackLockDelay;
       const turnSpeed = (this.level === 2) ? 1.30 : 1.65; // Velocidade suave e calma em rad/s (sem correria na última hora)
 
