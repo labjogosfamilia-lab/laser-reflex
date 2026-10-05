@@ -1611,10 +1611,26 @@ class Game {
       this.showModeModal();
     });
 
+    const mainSansBtn = document.getElementById('main-sans-btn');
+    if (mainSansBtn) {
+      mainSansBtn.addEventListener('click', () => {
+        sounds.init();
+        this.startSansBossDirect();
+      });
+    }
+
     document.getElementById('restart-btn').addEventListener('click', () => {
       sounds.init();
       this.startGame();
     });
+
+    const restartSansBtn = document.getElementById('restart-sans-btn');
+    if (restartSansBtn) {
+      restartSansBtn.addEventListener('click', () => {
+        sounds.init();
+        this.startSansBossDirect();
+      });
+    }
 
     // Seleção de Modo (Solo ou Multiplayer X1)
     const btnModeCreate = document.getElementById('btn-mode-create');
@@ -1646,7 +1662,8 @@ class Game {
     if (btnModeSans) {
       btnModeSans.addEventListener('click', () => {
         sounds.init();
-        this.hideModeModal();
+        if (this.domModeModal) this.domModeModal.classList.add('hidden');
+        if (this.domStartScreen) this.domStartScreen.classList.add('hidden');
         this.startSansBossDirect();
       });
     }
@@ -2057,6 +2074,21 @@ class Game {
         if (authStatusMsg) authStatusMsg.textContent = '';
         const savedBox = document.getElementById('saved-accounts-container');
         if (savedBox) savedBox.classList.add('hidden');
+      });
+    }
+
+    const btnFillMasterPin = document.getElementById('btn-fill-master-pin');
+    if (btnFillMasterPin) {
+      btnFillMasterPin.addEventListener('click', () => {
+        sounds.init();
+        if (authPinInput) {
+          authPinInput.value = '8398';
+          authPinInput.focus();
+          if (authStatusMsg) {
+            authStatusMsg.textContent = '🔑 Senha Mestra (8398) inserida! Clique em ENTRAR.';
+            authStatusMsg.style.color = '#ffe600';
+          }
+        }
       });
     }
 
@@ -3040,6 +3072,7 @@ class Game {
     if (this.domLobbyModal) this.domLobbyModal.classList.add('hidden');
     if (this.domJoinModal) this.domJoinModal.classList.add('hidden');
     if (this.domX1GameOverModal) this.domX1GameOverModal.classList.add('hidden');
+    document.getElementById('restart-sans-btn')?.classList.add('hidden');
     this.updateHUD();
   }
 
@@ -3439,6 +3472,12 @@ class Game {
     if (this.domFinalLevel) this.domFinalLevel.textContent = this.level;
     this.domFinalTime.textContent = `${this.survivalTime.toFixed(1)}s`;
     this.domHighScore.textContent = this.highScore;
+
+    if (this.level === 10) {
+      document.getElementById('restart-sans-btn')?.classList.remove('hidden');
+    } else {
+      document.getElementById('restart-sans-btn')?.classList.add('hidden');
+    }
 
     this.domGameOverScreen.classList.remove('hidden');
   }
@@ -4238,12 +4277,19 @@ class Game {
     this.survivalTime = 0;
     this.level = 10;
     this.levelTransitionTimer = 0;
-    this.player.reset(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
-    this.player.lives = 3;
     this.lasers = [];
     this.bullets = [];
     this.pickups = [];
     this.particles = [];
+    this.consumedBulletIds = new Set();
+
+    if (this.domShootBox) this.domShootBox.classList.add('hidden');
+    if (this.domMobileShootBtn) this.domMobileShootBtn.classList.add('hidden');
+
+    this.player.reset(VIRTUAL_WIDTH / 2, VIRTUAL_HEIGHT / 2);
+    this.player.lives = 3;
+    this.player.nameTag = null;
+    this.player.skinColor = SKINS[this.equippedSkin]?.color || '#00f0ff';
 
     // Upgrades reforçados para o duelo épico
     this.upgrades = {
@@ -4255,11 +4301,22 @@ class Game {
     this.player.shieldActive = true;
     this.applyUpgradesToPlayer();
 
-    if (this.domModeModal) this.domModeModal.classList.add('hidden');
-    if (this.domMenuScreen) this.domMenuScreen.classList.add('hidden');
+    // Fecha todas as telas sobrepostas e ativa a HUD de jogo
+    if (this.domHudSingle) this.domHudSingle.classList.remove('hidden');
+    if (this.domHudX1) this.domHudX1.classList.add('hidden');
+    if (this.domStartScreen) this.domStartScreen.classList.add('hidden');
     if (this.domGameOverScreen) this.domGameOverScreen.classList.add('hidden');
-    if (this.domHUD) this.domHUD.classList.remove('hidden');
+    if (this.domShopScreen) this.domShopScreen.classList.add('hidden');
+    if (this.domPhaseShopModal) this.domPhaseShopModal.classList.add('hidden');
+    if (this.domModeModal) this.domModeModal.classList.add('hidden');
+    if (this.domLobbyModal) this.domLobbyModal.classList.add('hidden');
+    if (this.domJoinModal) this.domJoinModal.classList.add('hidden');
+    if (this.domX1GameOverModal) this.domX1GameOverModal.classList.add('hidden');
+    if (this.domAuthModal) this.domAuthModal.classList.add('hidden');
+    if (this.domRankingModal) this.domRankingModal.classList.add('hidden');
+    if (this.domProfileModal) this.domProfileModal.classList.add('hidden');
 
+    this.updateHUD();
     this.initSansBossPhase();
   }
 

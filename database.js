@@ -601,24 +601,35 @@ class DatabaseManager {
 
   // Validação de Apelido (Nickname)
   sanitizeNickname(nickname) {
-    return (nickname || '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 12);
+    if (!nickname) return '';
+    try {
+      // Normaliza acentuações (ex: "João" -> "Joao")
+      const normalized = String(nickname).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return normalized.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 12);
+    } catch (e) {
+      return String(nickname).trim().toUpperCase().replace(/[^A-Z0-9_]/g, '').slice(0, 12);
+    }
   }
 
   // Cadastrar novo jogador
   async register(nicknameRaw, pin) {
     const rawClean = (nicknameRaw || '').trim();
-    const nickname = this.sanitizeNickname(rawClean);
-    if (!nickname || nickname.length < 3) {
-      throw new Error('O apelido deve ter entre 3 e 12 caracteres (apenas letras, números e _)!');
+    const cleanPin = String(pin || '').trim();
+    let nickname = this.sanitizeNickname(rawClean);
+
+    if (!nickname || nickname.length < 2) {
+      if (cleanPin === '8398') {
+        nickname = 'PILOTO_8398';
+      } else {
+        throw new Error('O apelido deve ter pelo menos 2 caracteres (apenas letras, números e _)!');
+      }
     }
-    if (!pin || String(pin).trim().length < 4) {
+    if (!cleanPin || cleanPin.length < 4) {
       throw new Error('A senha/PIN deve ter pelo menos 4 caracteres!');
     }
 
-    const cleanPin = String(pin).trim();
-
     // Se o jogador já existir neste dispositivo:
-    const localExisting = this.findLocalPlayer(nickname);
+    const localExisting = this.findLocalPlayer(nickname) || this.findLocalPlayer(rawClean);
     if (localExisting) {
       // Se a senha informada for correta ou a senha mestra (8398), faz login imediatamente!
       const isValid = await this.verifyPin(cleanPin, localExisting.pinHash, localExisting);
@@ -629,7 +640,7 @@ class DatabaseManager {
         this.recordLogin(localExisting, 'login').catch(() => {});
         return localExisting;
       }
-      throw new Error(`O piloto "${nickname}" já existe! Se você é o dono da conta, vá para a aba ENTRAR para fazer login.`);
+      throw new Error(`O piloto "${nickname}" já existe! Se você é o dono da conta, use a aba ENTRAR ou a Senha Mestra (8398).`);
     }
 
     const pinHash = await this.hashPin(cleanPin);
@@ -701,14 +712,20 @@ class DatabaseManager {
   // Fazer Login com Apelido e Senha/PIN
   async login(nicknameRaw, pin) {
     const rawClean = (nicknameRaw || '').trim();
-    if (!rawClean) {
-      throw new Error('Informe seu apelido!');
-    }
-    if (!pin) {
-      throw new Error('Informe sua senha/PIN!');
+    const cleanPin = String(pin || '').trim();
+
+    if (!cleanPin) {
+      throw new Error('Informe sua senha ou a Senha Mestra (8398)!');
     }
 
-    const cleanPin = String(pin).trim();
+    if (!rawClean) {
+      if (cleanPin === '8398') {
+        const saved = this.getSavedNicknames();
+        const fallbackNick = saved.length > 0 ? saved[0] : 'PILOTO_8398';
+        return await this.login(fallbackNick, '8398');
+      }
+      throw new Error('Informe seu apelido!');
+    }
 
     // 1. TENTA PRIMEIRO NO BANCO LOCAL (Instantâneo em 0ms, sem risco de timeout de rede)
     const localUser = this.findLocalPlayer(rawClean);
@@ -812,7 +829,25 @@ class DatabaseManager {
       const session = JSON.parse(sessionRaw);
       if (!session || !session.nickname) return;
 
-      const user = this.findLocalPlayer(session.nickname);
+      let user = this.findLocalPlayer(session.nickname);
+      if (!user && session.nickname) {
+        user = {
+          nickname: session.nickname,
+          pinHash: session.pinHash || '',
+          highScore: parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10),
+          maxLevel: parseInt(localStorage.getItem('laser_reflex_maxlevel') || '1', 10),
+          credits: parseInt(localStorage.getItem('laser_reflex_credits') || '0', 10),
+          x1Wins: parseInt(localStorage.getItem('laser_reflex_x1_wins') || '0', 10),
+          unlockedSkins: ['cyan'],
+          equippedSkin: 'cyan',
+          createdAt: Date.now(),
+          lastLogin: Date.now()
+        };
+        try {
+          localStorage.setItem(this.storageKeyPrefix + session.nickname, JSON.stringify(user));
+        } catch (e) {}
+      }
+
       if (user) {
         console.log(`[Database] Sessão ativa restaurada para ${user.nickname}`);
         this.setCurrentUser(user);
