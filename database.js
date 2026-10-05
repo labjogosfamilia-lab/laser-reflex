@@ -26,16 +26,16 @@ const FIREBASE_CONFIG = {
 // RANKING GLOBAL OFICIAL DE PILOTOS (LIGA MUNDIAL LASER REFLEX)
 // =========================================================================
 const DEFAULT_GLOBAL_LEADERBOARD = [
-  { nickname: 'VORTEX_PILOT', highScore: 48950, maxLevel: 10, x1Wins: 18, equippedSkin: 'gold', updatedAt: 1728000000000 },
-  { nickname: 'NEON_GHOST', highScore: 43200, maxLevel: 9, x1Wins: 14, equippedSkin: 'cyan', updatedAt: 1728001000000 },
-  { nickname: 'CYBER_VIPER', highScore: 37600, maxLevel: 8, x1Wins: 11, equippedSkin: 'purple', updatedAt: 1728002000000 },
-  { nickname: 'QUANTUM_BLAZE', highScore: 31400, maxLevel: 7, x1Wins: 9, equippedSkin: 'crimson', updatedAt: 1728003000000 },
-  { nickname: 'HYPER_PULSE', highScore: 26800, maxLevel: 6, x1Wins: 8, equippedSkin: 'emerald', updatedAt: 1728004000000 },
-  { nickname: 'SHADOW_CORE', highScore: 21500, maxLevel: 5, x1Wins: 6, equippedSkin: 'purple', updatedAt: 1728005000000 },
-  { nickname: 'SOLAR_STRIKE', highScore: 16900, maxLevel: 4, x1Wins: 4, equippedSkin: 'gold', updatedAt: 1728006000000 },
-  { nickname: 'CHRONO_REFLEX', highScore: 12400, maxLevel: 3, x1Wins: 3, equippedSkin: 'cyan', updatedAt: 1728007000000 },
-  { nickname: 'TITAN_AERO', highScore: 8300, maxLevel: 2, x1Wins: 2, equippedSkin: 'emerald', updatedAt: 1728008000000 },
-  { nickname: 'NEXUS_DRONE', highScore: 4600, maxLevel: 1, x1Wins: 1, equippedSkin: 'crimson', updatedAt: 1728009000000 }
+  { nickname: 'VORTEX_PILOT', highScore: 48950, maxLevel: 10, x1Wins: 18, sansTime: 53.0, sansVictories: 3, equippedSkin: 'gold', updatedAt: 1728000000000 },
+  { nickname: 'NEON_GHOST', highScore: 43200, maxLevel: 9, x1Wins: 14, sansTime: 49.5, sansVictories: 1, equippedSkin: 'cyan', updatedAt: 1728001000000 },
+  { nickname: 'CYBER_VIPER', highScore: 37600, maxLevel: 8, x1Wins: 11, sansTime: 42.8, sansVictories: 0, equippedSkin: 'purple', updatedAt: 1728002000000 },
+  { nickname: 'QUANTUM_BLAZE', highScore: 31400, maxLevel: 7, x1Wins: 9, sansTime: 36.2, sansVictories: 0, equippedSkin: 'crimson', updatedAt: 1728003000000 },
+  { nickname: 'HYPER_PULSE', highScore: 26800, maxLevel: 6, x1Wins: 8, sansTime: 30.5, sansVictories: 0, equippedSkin: 'emerald', updatedAt: 1728004000000 },
+  { nickname: 'SHADOW_CORE', highScore: 21500, maxLevel: 5, x1Wins: 6, sansTime: 24.1, sansVictories: 0, equippedSkin: 'purple', updatedAt: 1728005000000 },
+  { nickname: 'SOLAR_STRIKE', highScore: 16900, maxLevel: 4, x1Wins: 4, sansTime: 18.7, sansVictories: 0, equippedSkin: 'gold', updatedAt: 1728006000000 },
+  { nickname: 'CHRONO_REFLEX', highScore: 12400, maxLevel: 3, x1Wins: 3, sansTime: 14.3, sansVictories: 0, equippedSkin: 'cyan', updatedAt: 1728007000000 },
+  { nickname: 'TITAN_AERO', highScore: 8300, maxLevel: 2, x1Wins: 2, sansTime: 9.8, sansVictories: 0, equippedSkin: 'emerald', updatedAt: 1728008000000 },
+  { nickname: 'NEXUS_DRONE', highScore: 4600, maxLevel: 1, x1Wins: 1, sansTime: 5.2, sansVictories: 0, equippedSkin: 'crimson', updatedAt: 1728009000000 }
 ];
 
 class DatabaseManager {
@@ -71,8 +71,9 @@ class DatabaseManager {
   ensureGlobalPilotsInLeaderboard() {
     try {
       const list = this.getLocalLeaderboard();
-      // Se houver menos de 5 pilotos, atualiza imediatamente com a base completa de competidores
-      if (!list || list.length < 5) {
+      const hasSansData = list && list.some(p => (p.sansTime || 0) > 0);
+      // Se houver menos de 5 pilotos ou faltar os recordes do Sam, recarrega a base completa
+      if (!list || list.length < 5 || !hasSansData) {
         localStorage.removeItem(this.leaderboardLocalKey);
         this.getLocalLeaderboard();
       }
@@ -83,20 +84,24 @@ class DatabaseManager {
   ensureCurrentPlayerInLeaderboard() {
     try {
       if (this.currentUser) {
-        if ((this.currentUser.highScore || 0) > 0 || (this.currentUser.x1Wins || 0) > 0) {
+        if ((this.currentUser.highScore || 0) > 0 || (this.currentUser.x1Wins || 0) > 0 || (this.currentUser.sansTime || 0) > 0) {
           this.updateLocalLeaderboard(this.currentUser);
         }
       } else {
         const localHs = parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10);
         const guestHs = parseInt(localStorage.getItem('laser_guest_highscore') || '0', 10);
+        const guestSansTime = parseFloat(localStorage.getItem('laser_guest_sanstime') || '0');
+        const guestSansVictories = parseInt(localStorage.getItem('laser_guest_sansvictories') || '0', 10);
         const bestHs = Math.max(localHs, guestHs);
-        if (bestHs > 0) {
+        if (bestHs > 0 || guestSansTime > 0) {
           const guestNick = this.getGuestNickname();
           this.updateLocalLeaderboard({
             nickname: guestNick,
             highScore: bestHs,
             maxLevel: parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10),
             x1Wins: parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10),
+            sansTime: guestSansTime,
+            sansVictories: guestSansVictories,
             equippedSkin: (this.game && this.game.equippedSkin) || localStorage.getItem('laser_reflex_skin') || 'cyan',
             updatedAt: Date.now()
           });
@@ -289,6 +294,13 @@ class DatabaseManager {
         user.x1Wins = (user.x1Wins || 0) + 1;
       }
 
+      if (matchData.sansTime !== undefined && matchData.sansTime > 0) {
+        user.sansTime = Math.max(user.sansTime || 0, matchData.sansTime);
+        if (matchData.sansVictory) {
+          user.sansVictories = (user.sansVictories || 0) + 1;
+        }
+      }
+
       if (this.game && this.game.credits !== undefined) {
         user.credits = this.game.credits;
       }
@@ -303,6 +315,8 @@ class DatabaseManager {
         highScore: user.highScore || 0,
         maxLevel: user.maxLevel || 1,
         x1Wins: user.x1Wins || 0,
+        sansTime: user.sansTime || 0,
+        sansVictories: user.sansVictories || 0,
         equippedSkin: user.equippedSkin || 'cyan',
         updatedAt: now
       };
@@ -311,6 +325,8 @@ class DatabaseManager {
       let guestScore = parseInt(localStorage.getItem('laser_guest_highscore') || '0', 10);
       let guestLevel = parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10);
       let guestX1Wins = parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10);
+      let guestSansTime = parseFloat(localStorage.getItem('laser_guest_sanstime') || '0');
+      let guestSansVictories = parseInt(localStorage.getItem('laser_guest_sansvictories') || '0', 10);
 
       if (matchData.mode === 'solo') {
         if (matchScore > guestScore) {
@@ -330,11 +346,24 @@ class DatabaseManager {
         localStorage.setItem('laser_guest_x1wins', guestX1Wins);
       }
 
+      if (matchData.sansTime !== undefined && matchData.sansTime > 0) {
+        if (matchData.sansTime > guestSansTime) {
+          guestSansTime = matchData.sansTime;
+          localStorage.setItem('laser_guest_sanstime', guestSansTime.toString());
+        }
+        if (matchData.sansVictory) {
+          guestSansVictories += 1;
+          localStorage.setItem('laser_guest_sansvictories', guestSansVictories.toString());
+        }
+      }
+
       rankingEntry = {
         nickname: nickname,
         highScore: Math.max(guestScore, matchScore),
         maxLevel: Math.max(guestLevel, matchLevel),
         x1Wins: guestX1Wins,
+        sansTime: guestSansTime,
+        sansVictories: guestSansVictories,
         equippedSkin: (this.game && this.game.equippedSkin) || localStorage.getItem('laser_reflex_skin') || 'cyan',
         updatedAt: now
       };
@@ -687,6 +716,11 @@ class DatabaseManager {
       this.game.x1Wins || 0,
       parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10)
     );
+    const inheritedSansTime = Math.max(
+      parseFloat((this.game.sansTimer || 0).toFixed(1)),
+      parseFloat(localStorage.getItem('laser_guest_sanstime') || '0')
+    );
+    const inheritedSansVictories = parseInt(localStorage.getItem('laser_guest_sansvictories') || '0', 10);
 
     const newPlayer = {
       nickname: nickname,
@@ -695,6 +729,8 @@ class DatabaseManager {
       maxLevel: inheritedLevel,
       credits: this.game.credits || 0,
       x1Wins: inheritedX1,
+      sansTime: inheritedSansTime,
+      sansVictories: inheritedSansVictories,
       matchesPlayed: parseInt(localStorage.getItem('laser_guest_matches') || '0', 10),
       unlockedSkins: this.game.ownedSkins || ['cyan'],
       equippedSkin: this.game.equippedSkin || 'cyan',
@@ -991,6 +1027,8 @@ class DatabaseManager {
         highScore: Math.floor(player.highScore || 0),
         maxLevel: Math.max(1, Math.floor(player.maxLevel || 1)),
         x1Wins: Math.floor(player.x1Wins || 0),
+        sansTime: parseFloat((player.sansTime || 0).toFixed(1)),
+        sansVictories: Math.floor(player.sansVictories || 0),
         equippedSkin: player.equippedSkin || 'cyan',
         updatedAt: player.updatedAt || Date.now()
       };
@@ -999,6 +1037,8 @@ class DatabaseManager {
         list[idx].highScore = Math.max(list[idx].highScore || 0, entry.highScore);
         list[idx].maxLevel = Math.max(list[idx].maxLevel || 1, entry.maxLevel);
         list[idx].x1Wins = Math.max(list[idx].x1Wins || 0, entry.x1Wins);
+        list[idx].sansTime = Math.max(list[idx].sansTime || 0, entry.sansTime);
+        list[idx].sansVictories = Math.max(list[idx].sansVictories || 0, entry.sansVictories);
         list[idx].equippedSkin = entry.equippedSkin;
         list[idx].updatedAt = entry.updatedAt;
       } else {
@@ -1006,7 +1046,7 @@ class DatabaseManager {
       }
 
       localStorage.setItem(this.leaderboardLocalKey, JSON.stringify(list));
-      console.log(`[Database] Leaderboard local atualizado para ${player.nickname} (Score: ${entry.highScore})`);
+      console.log(`[Database] Leaderboard local atualizado para ${player.nickname} (Score: ${entry.highScore}, Sam: ${entry.sansTime}s)`);
     } catch (e) {
       console.warn('Erro ao atualizar leaderboard local:', e);
     }
@@ -1035,10 +1075,21 @@ class DatabaseManager {
                   existing.highScore = Math.max(existing.highScore || 0, p.highScore || 0);
                   existing.maxLevel = Math.max(existing.maxLevel || 1, p.maxLevel || 1);
                   existing.x1Wins = Math.max(existing.x1Wins || 0, p.x1Wins || 0);
+                  existing.sansTime = Math.max(existing.sansTime || 0, p.sansTime || 0);
+                  existing.sansVictories = Math.max(existing.sansVictories || 0, p.sansVictories || 0);
                   existing.equippedSkin = p.equippedSkin || existing.equippedSkin;
                   existing.updatedAt = p.updatedAt || existing.updatedAt;
                 } else {
-                  map.set(key, { ...p });
+                  map.set(key, {
+                    nickname: p.nickname,
+                    highScore: Math.floor(p.highScore || 0),
+                    maxLevel: Math.max(1, Math.floor(p.maxLevel || 1)),
+                    x1Wins: Math.floor(p.x1Wins || 0),
+                    sansTime: parseFloat((p.sansTime || 0).toFixed(1)),
+                    sansVictories: Math.floor(p.sansVictories || 0),
+                    equippedSkin: p.equippedSkin || 'cyan',
+                    updatedAt: p.updatedAt || Date.now()
+                  });
                 }
               }
             });
@@ -1060,6 +1111,8 @@ class DatabaseManager {
                 highScore: Math.floor(u.highScore || 0),
                 maxLevel: Math.max(1, Math.floor(u.maxLevel || 1)),
                 x1Wins: Math.floor(u.x1Wins || 0),
+                sansTime: parseFloat((u.sansTime || 0).toFixed(1)),
+                sansVictories: Math.floor(u.sansVictories || 0),
                 equippedSkin: u.equippedSkin || 'cyan',
                 updatedAt: u.updatedAt || Date.now()
               };
@@ -1067,6 +1120,8 @@ class DatabaseManager {
                 existing.highScore = Math.max(existing.highScore || 0, uEntry.highScore);
                 existing.maxLevel = Math.max(existing.maxLevel || 1, uEntry.maxLevel);
                 existing.x1Wins = Math.max(existing.x1Wins || 0, uEntry.x1Wins);
+                existing.sansTime = Math.max(existing.sansTime || 0, uEntry.sansTime);
+                existing.sansVictories = Math.max(existing.sansVictories || 0, uEntry.sansVictories);
                 existing.equippedSkin = uEntry.equippedSkin;
               } else {
                 map.set(key, uEntry);
@@ -1084,6 +1139,8 @@ class DatabaseManager {
           highScore: Math.max(this.currentUser.highScore || 0, (this.game && this.game.highScore) || 0),
           maxLevel: Math.max(this.currentUser.maxLevel || 1, (this.game && this.game.level) || 1),
           x1Wins: Math.floor(this.currentUser.x1Wins || 0),
+          sansTime: parseFloat((this.currentUser.sansTime || 0).toFixed(1)),
+          sansVictories: Math.floor(this.currentUser.sansVictories || 0),
           equippedSkin: this.currentUser.equippedSkin || (this.game && this.game.equippedSkin) || 'cyan',
           updatedAt: Date.now()
         };
@@ -1091,8 +1148,10 @@ class DatabaseManager {
       } else {
         const localHs = parseInt(localStorage.getItem('laser_reflex_highscore') || '0', 10);
         const guestHs = parseInt(localStorage.getItem('laser_guest_highscore') || '0', 10);
+        const guestSansTime = parseFloat(localStorage.getItem('laser_guest_sanstime') || '0');
+        const guestSansVictories = parseInt(localStorage.getItem('laser_guest_sansvictories') || '0', 10);
         const bestHs = Math.max(localHs, guestHs, (this.game && this.game.highScore) || 0);
-        if (bestHs > 0) {
+        if (bestHs > 0 || guestSansTime > 0) {
           const guestNick = this.getGuestNickname();
           const key = guestNick.toUpperCase();
           map.set(key, {
@@ -1100,6 +1159,8 @@ class DatabaseManager {
             highScore: bestHs,
             maxLevel: parseInt(localStorage.getItem('laser_guest_maxlevel') || '1', 10),
             x1Wins: parseInt(localStorage.getItem('laser_guest_x1wins') || '0', 10),
+            sansTime: guestSansTime,
+            sansVictories: guestSansVictories,
             equippedSkin: (this.game && this.game.equippedSkin) || localStorage.getItem('laser_reflex_skin') || 'cyan',
             updatedAt: Date.now()
           });
@@ -1117,7 +1178,10 @@ class DatabaseManager {
 
   // Obter o Ranking Público Global ordenado por Categoria diretamente do Banco de Dados
   async getRanking(category = 'score') {
-    const orderField = (category === 'x1') ? 'x1Wins' : 'highScore';
+    let orderField = 'highScore';
+    if (category === 'x1') orderField = 'x1Wins';
+    if (category === 'sans') orderField = 'sansTime';
+
     const map = new Map();
 
     // 1. Carrega todos os pilotos do ranking base (rivais globais + jogadores locais)
@@ -1144,6 +1208,8 @@ class DatabaseManager {
                 existing.highScore = Math.max(existing.highScore || 0, data.highScore || 0);
                 existing.maxLevel = Math.max(existing.maxLevel || 1, data.maxLevel || 1);
                 existing.x1Wins = Math.max(existing.x1Wins || 0, data.x1Wins || 0);
+                existing.sansTime = Math.max(existing.sansTime || 0, data.sansTime || 0);
+                existing.sansVictories = Math.max(existing.sansVictories || 0, data.sansVictories || 0);
                 existing.equippedSkin = data.equippedSkin || existing.equippedSkin;
                 existing.updatedAt = data.updatedAt || existing.updatedAt;
               } else {
@@ -1165,7 +1231,20 @@ class DatabaseManager {
     }
 
     const mergedList = Array.from(map.values());
-    mergedList.sort((a, b) => (b[orderField] || 0) - (a[orderField] || 0));
+
+    if (category === 'sans') {
+      mergedList.sort((a, b) => {
+        const vicA = a.sansVictories || 0;
+        const vicB = b.sansVictories || 0;
+        if (vicB !== vicA) return vicB - vicA;
+        return (b.sansTime || 0) - (a.sansTime || 0);
+      });
+    } else if (category === 'x1') {
+      mergedList.sort((a, b) => (b.x1Wins || 0) - (a.x1Wins || 0));
+    } else {
+      mergedList.sort((a, b) => (b.highScore || 0) - (a.highScore || 0));
+    }
+
     return mergedList.slice(0, 30);
   }
 }

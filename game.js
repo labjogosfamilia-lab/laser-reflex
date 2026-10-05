@@ -2274,6 +2274,7 @@ class Game {
 
     // Modal de Ranking
     const tabRankScore = document.getElementById('tab-rank-score');
+    const tabRankSans = document.getElementById('tab-rank-sans');
     const tabRankX1 = document.getElementById('tab-rank-x1');
     const btnRefreshRanking = document.getElementById('btn-refresh-ranking');
     const btnCloseRanking = document.getElementById('btn-close-ranking');
@@ -2281,6 +2282,12 @@ class Game {
     if (tabRankScore) {
       tabRankScore.addEventListener('click', () => {
         this.showRankingModal('score');
+      });
+    }
+
+    if (tabRankSans) {
+      tabRankSans.addEventListener('click', () => {
+        this.showRankingModal('sans');
       });
     }
 
@@ -2337,7 +2344,8 @@ class Game {
     if (btnGameOverRanking) {
       btnGameOverRanking.addEventListener('click', () => {
         sounds.init();
-        this.showRankingModal('score');
+        const initialCat = (this.level === 10) ? 'sans' : 'score';
+        this.showRankingModal(initialCat);
       });
     }
 
@@ -2432,18 +2440,28 @@ class Game {
     }
 
     const tabRankScore = document.getElementById('tab-rank-score');
+    const tabRankSans = document.getElementById('tab-rank-sans');
     const tabRankX1 = document.getElementById('tab-rank-x1');
     const statHeader = document.getElementById('ranking-stat-header');
+    const levelHeader = document.getElementById('ranking-level-header');
     const listContainer = document.getElementById('ranking-list-container');
 
-    if (category === 'x1') {
+    tabRankScore?.classList.remove('active');
+    tabRankSans?.classList.remove('active');
+    tabRankX1?.classList.remove('active');
+
+    if (category === 'sans') {
+      tabRankSans?.classList.add('active');
+      if (statHeader) statHeader.textContent = 'TEMPO SAM';
+      if (levelHeader) levelHeader.textContent = 'STATUS';
+    } else if (category === 'x1') {
       tabRankX1?.classList.add('active');
-      tabRankScore?.classList.remove('active');
       if (statHeader) statHeader.textContent = 'VITÓRIAS X1';
+      if (levelHeader) levelHeader.textContent = 'FASE MÁX';
     } else {
       tabRankScore?.classList.add('active');
-      tabRankX1?.classList.remove('active');
       if (statHeader) statHeader.textContent = 'PONTUAÇÃO';
+      if (levelHeader) levelHeader.textContent = 'FASE MÁX';
     }
 
     if (listContainer) {
@@ -2479,6 +2497,24 @@ class Game {
       }
 
       let html = '';
+      if (category === 'sans') {
+        html += `
+          <div class="ranking-sans-intro-card">
+            <span class="sans-intro-icon">💀</span>
+            <div class="sans-intro-text">
+              <strong>DESAFIO DO CHEFÃO SAM (ROTA GENOCIDA):</strong>
+              <span>Sobreviva aos 53.0s de ataques brutais com 3 Vidas e poderes NV.10! Derrote o Sans para entrar no topo da Liga!</span>
+            </div>
+          </div>
+          <div class="ranking-row sans-boss-row">
+            <span class="col-pos">👑 BOSS</span>
+            <span class="col-pilot">💀 SAM (SANS SUPREMO)</span>
+            <span class="col-stat">53.0s</span>
+            <span class="col-level">INTOCÁVEL</span>
+          </div>
+        `;
+      }
+
       const currentNick = this.db.currentUser ? this.db.currentUser.nickname : (this.db.getGuestNickname ? this.db.getGuestNickname() : '');
 
       list.forEach((item, index) => {
@@ -2499,14 +2535,51 @@ class Game {
         const isMe = currentNick && (currentNick === item.nickname);
         if (isMe) rowClass += ' current-player';
 
-        const statVal = (category === 'x1') ? (item.x1Wins || 0) : (item.highScore || 0);
+        let statVal = '';
+        let extraVal = '';
+
+        if (category === 'sans') {
+          const sTime = (item.sansTime !== undefined && item.sansTime > 0) ? `${item.sansTime.toFixed(1)}s` : '0.0s';
+          const sVictories = item.sansVictories || 0;
+          if (sVictories > 0) {
+            statVal = `⭐ ${sTime}`;
+            extraVal = `🏆 ${sVictories}x Venceu`;
+          } else if (item.sansTime >= 46.0) {
+            statVal = `⚡ ${sTime}`;
+            extraVal = `💀 Cerco 360°`;
+          } else if (item.sansTime >= 33.0) {
+            statVal = `⚡ ${sTime}`;
+            extraVal = `💀 Roda Mortal`;
+          } else if (item.sansTime >= 26.0) {
+            statVal = `🔥 ${sTime}`;
+            extraVal = `💀 Telecinese`;
+          } else if (item.sansTime >= 16.0) {
+            statVal = `🔥 ${sTime}`;
+            extraVal = `💀 Blasters`;
+          } else if (item.sansTime >= 7.0) {
+            statVal = `${sTime}`;
+            extraVal = `💀 Chuva Ossos`;
+          } else if (item.sansTime > 0) {
+            statVal = `${sTime}`;
+            extraVal = `💀 Slam Inicial`;
+          } else {
+            statVal = `0.0s`;
+            extraVal = `Não Enfrentou`;
+          }
+        } else if (category === 'x1') {
+          statVal = (item.x1Wins || 0).toLocaleString('pt-BR');
+          extraVal = `Fase ${item.maxLevel || 1}`;
+        } else {
+          statVal = (item.highScore || 0).toLocaleString('pt-BR');
+          extraVal = (item.maxLevel >= 10) ? '💀 Fase 10 (Sam)' : `Fase ${item.maxLevel || 1}`;
+        }
 
         html += `
           <div class="${rowClass}">
             <span class="col-pos">${medal}</span>
             <span class="col-pilot">${item.nickname} ${isMe ? '⭐ (Você)' : ''}</span>
-            <span class="col-stat">${statVal.toLocaleString('pt-BR')}</span>
-            <span class="col-level">Fase ${item.maxLevel || 1}</span>
+            <span class="col-stat">${statVal}</span>
+            <span class="col-level">${extraVal}</span>
           </div>
         `;
       });
@@ -2547,6 +2620,13 @@ class Game {
       if (creditsElem) creditsElem.textContent = `🪙 ${(user.credits ?? this.credits ?? 0).toLocaleString('pt-BR')}`;
       if (matchesElem) matchesElem.textContent = user.matchesPlayed || 0;
       if (skinsElem) skinsElem.textContent = (user.unlockedSkins?.length || this.ownedSkins?.length || 1);
+
+      const sansElem = document.getElementById('profile-sanstime');
+      if (sansElem) {
+        const sTime = (user.sansTime !== undefined && user.sansTime > 0) ? `${user.sansTime.toFixed(1)}s` : '0.0s';
+        const sVic = user.sansVictories || 0;
+        sansElem.textContent = sVic > 0 ? `${sTime} (🏆 ${sVic}x)` : sTime;
+      }
 
       this.domProfileModal.classList.remove('hidden');
     }
@@ -3478,6 +3558,20 @@ class Game {
       localStorage.setItem('laser_reflex_highscore', this.highScore);
     }
 
+    const isSansFight = (this.level === 10);
+    const sansTimeVal = isSansFight ? parseFloat((this.sansTimer || 0).toFixed(1)) : 0;
+
+    if (isSansFight && sansTimeVal > 0) {
+      const bestSans = parseFloat(localStorage.getItem('laser_guest_sanstime') || '0');
+      if (sansTimeVal > bestSans) {
+        localStorage.setItem('laser_guest_sanstime', sansTimeVal.toString());
+      }
+      if (isVictory) {
+        const curV = parseInt(localStorage.getItem('laser_guest_sansvictories') || '0', 10);
+        localStorage.setItem('laser_guest_sansvictories', (curV + 1).toString());
+      }
+    }
+
     if (this.db) {
       this.db.recordMatchResult({
         mode: 'solo',
@@ -3485,7 +3579,10 @@ class Game {
         level: this.level,
         survivalTime: parseFloat(this.survivalTime.toFixed(1)),
         creditsEarned: matchBonus,
-        victory: !!isVictory
+        victory: !!isVictory,
+        isSans: isSansFight,
+        sansTime: isSansFight ? sansTimeVal : undefined,
+        sansVictory: isSansFight ? !!isVictory : undefined
       });
     }
 
@@ -3515,15 +3612,23 @@ class Game {
 
     const goDbBadge = document.getElementById('gameover-db-badge');
     if (goDbBadge) {
-      if (this.db && this.db.currentUser) {
-        goDbBadge.textContent = isVictory
-          ? `🏆 VITÓRIA LENDÁRIA gravada no perfil de ${this.db.currentUser.nickname}! Ranking atualizado.`
-          : `💾 Partida registrada no perfil de ${this.db.currentUser.nickname}! Pontuação salva no Ranking.`;
+      const playerNick = this.db && this.db.currentUser ? this.db.currentUser.nickname : (this.db && this.db.getGuestNickname ? this.db.getGuestNickname() : 'PILOTO');
+      if (isSansFight) {
+        if (isVictory) {
+          goDbBadge.textContent = `🏆 VITÓRIA CONTRA O SAM gravada para ${playerNick}! Ranking do Sam atualizado.`;
+        } else {
+          goDbBadge.textContent = `💀 Sobreviveu ${sansTimeVal.toFixed(1)}s contra o Sam! Recorde gravado no Ranking para ${playerNick}.`;
+        }
       } else {
-        const guestNick = this.db && this.db.getGuestNickname ? this.db.getGuestNickname() : 'PILOTO';
-        goDbBadge.textContent = isVictory
-          ? `🏆 VITÓRIA LENDÁRIA registrada no Ranking como ${guestNick}!`
-          : `💾 Partida registrada no Ranking como ${guestNick}! (Crie uma conta para salvar seu nome oficial)`;
+        if (this.db && this.db.currentUser) {
+          goDbBadge.textContent = isVictory
+            ? `🏆 VITÓRIA LENDÁRIA gravada no perfil de ${playerNick}! Ranking atualizado.`
+            : `💾 Partida registrada no perfil de ${playerNick}! Pontuação salva no Ranking.`;
+        } else {
+          goDbBadge.textContent = isVictory
+            ? `🏆 VITÓRIA LENDÁRIA registrada no Ranking como ${playerNick}!`
+            : `💾 Partida registrada no Ranking como ${playerNick}! (Crie uma conta para salvar seu nome oficial)`;
+        }
       }
     }
 

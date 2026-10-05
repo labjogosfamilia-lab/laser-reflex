@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Laser Reflex - Sobrevivência Neon</title>
-  <link rel="stylesheet" href="style.css?v=10.2">
+  <link rel="stylesheet" href="style.css?v=10.3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
@@ -487,15 +487,16 @@
         <div id="ranking-db-badge" class="ranking-db-badge">💾 Consultando banco de dados...</div>
 
         <div class="ranking-tabs">
-          <button id="tab-rank-score" class="ranking-tab-btn active">🚀 MODO SOLO (PONTUAÇÃO)</button>
-          <button id="tab-rank-x1" class="ranking-tab-btn">⚔️ DUELO X1 (VITÓRIAS)</button>
+          <button id="tab-rank-score" class="ranking-tab-btn active">🚀 SOLO (PONTOS)</button>
+          <button id="tab-rank-sans" class="ranking-tab-btn">💀 CHEFÃO SAM</button>
+          <button id="tab-rank-x1" class="ranking-tab-btn">⚔️ DUELO X1</button>
         </div>
 
         <div class="ranking-table-header">
           <span class="col-pos">POS</span>
           <span class="col-pilot">PILOTO</span>
           <span class="col-stat" id="ranking-stat-header">PONTUAÇÃO</span>
-          <span class="col-level">FASE MÁX</span>
+          <span class="col-level" id="ranking-level-header">FASE MÁX</span>
         </div>
 
         <div class="ranking-list" id="ranking-list-container">
@@ -536,6 +537,10 @@
             <strong id="profile-x1wins">0</strong>
           </div>
           <div class="stat-item">
+            <span>CHEFÃO SAM:</span>
+            <strong id="profile-sanstime">0.0s</strong>
+          </div>
+          <div class="stat-item">
             <span>CRÉDITOS TOTAIS:</span>
             <strong id="profile-credits">🪙 0</strong>
           </div>
@@ -561,9 +566,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <!-- Scripts do Jogo -->
-  <script src="database.js?v=10.2"></script>
+  <script src="database.js?v=10.3"></script>
   <script src="peerjs.min.js"></script>
-  <script src="network.js?v=10.2"></script>
-  <script src="game.js?v=10.2"></script>
+  <script src="network.js?v=10.3"></script>
+  <script src="game.js?v=10.3"></script>
 </body>
 </html>
