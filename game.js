@@ -500,6 +500,8 @@ class Player {
     this.shootCooldownTimer = 0;
     this.isBlueSoul = false;
     this.blueSoulTimer = 0;
+    this.slamVx = 0;
+    this.slamVy = 0;
 
     // Rastro visual (Afterimage)
     this.trail = [];
@@ -520,6 +522,8 @@ class Player {
     this.dashTimer = 0;
     this.isBlueSoul = false;
     this.blueSoulTimer = 0;
+    this.slamVx = 0;
+    this.slamVy = 0;
     this.trail = [];
     this.nameTag = null;
   }
@@ -676,6 +680,16 @@ class Player {
         this.vx = 0;
         this.vy = 0;
       }
+    }
+
+    // Aplica impulso de telecinese / gravidade (Slam de Sans)
+    if (this.slamVx !== 0 || this.slamVy !== 0) {
+      this.x += this.slamVx * dt;
+      this.y += this.slamVy * dt;
+      this.slamVx *= Math.max(0, 1 - 5 * dt);
+      this.slamVy *= Math.max(0, 1 - 5 * dt);
+      if (Math.abs(this.slamVx) < 5) this.slamVx = 0;
+      if (Math.abs(this.slamVy) < 5) this.slamVy = 0;
     }
 
     this.x += this.vx * dt;
@@ -3417,9 +3431,9 @@ class Game {
     }
   }
 
-  triggerGameOver() {
+  triggerGameOver(isVictory = false) {
     this.gameState = STATE.GAMEOVER;
-    this.screenShake = 20;
+    this.screenShake = isVictory ? 10 : 20;
 
     // SE MORRE RESETA: zera completamente os upgrades e créditos da partida!
     this.upgrades = {
@@ -3435,7 +3449,7 @@ class Game {
     } catch (e) {}
 
     // Bônus permanente de créditos de performance para comprar skins na Cyber Loja
-    const matchBonus = Math.max(15, Math.floor(this.score / 80));
+    const matchBonus = isVictory ? 500 : Math.max(15, Math.floor(this.score / 80));
     this.credits = (this.credits || 0) + matchBonus;
     localStorage.setItem('laser_reflex_credits', this.credits);
     if (this.domPlayerCredits) {
@@ -3454,17 +3468,46 @@ class Game {
         score: finalScoreVal,
         level: this.level,
         survivalTime: parseFloat(this.survivalTime.toFixed(1)),
-        creditsEarned: matchBonus
+        creditsEarned: matchBonus,
+        victory: !!isVictory
       });
+    }
+
+    const titleEl = document.querySelector('.game-over-title');
+    const subEl = document.querySelector('.game-over-subtitle');
+
+    if (isVictory) {
+      if (titleEl) {
+        titleEl.textContent = '🏆 VITÓRIA LENDÁRIA! 🏆';
+        titleEl.classList.add('victory');
+      }
+      if (subEl) {
+        subEl.textContent = 'Você sobreviveu à rota mais difícil de Undertale e derrotou o Sans!';
+        subEl.classList.add('victory');
+      }
+      sounds.playLevelUp();
+    } else {
+      if (titleEl) {
+        titleEl.textContent = 'SISTEMA CRÍTICO';
+        titleEl.classList.remove('victory');
+      }
+      if (subEl) {
+        subEl.textContent = 'O drone foi destruído pelos feixes de laser.';
+        subEl.classList.remove('victory');
+      }
     }
 
     const goDbBadge = document.getElementById('gameover-db-badge');
     if (goDbBadge) {
       if (this.db && this.db.currentUser) {
-        goDbBadge.textContent = `💾 Partida registrada no perfil de ${this.db.currentUser.nickname}! Pontuação salva no Ranking.`;
+        goDbBadge.textContent = isVictory
+          ? `🏆 VITÓRIA LENDÁRIA gravada no perfil de ${this.db.currentUser.nickname}! Ranking atualizado.`
+          : `💾 Partida registrada no perfil de ${this.db.currentUser.nickname}! Pontuação salva no Ranking.`;
       } else {
         const guestNick = this.db && this.db.getGuestNickname ? this.db.getGuestNickname() : 'PILOTO';
-        goDbBadge.textContent = `💾 Partida registrada no Ranking como ${guestNick}! (Crie uma conta para salvar seu nome oficial)`;
+        goDbBadge.textContent = isVictory
+          ? `🏆 VITÓRIA LENDÁRIA registrada no Ranking como ${guestNick}!`
+          : `💾 Partida registrada no Ranking como ${guestNick}! (Crie uma conta para salvar seu nome oficial)`;
       }
     }
 
@@ -3835,7 +3878,8 @@ class Game {
       this.score += dt * 15; // Pontos por segundo vivo
 
       // Checagem de FASE: Conclui a fase ao atingir múltiplos de 5000 pontos (abre a Estação de Melhorias)
-      if (this.score >= this.level * this.pointsPerLevel) {
+      // Exclui a Fase 10 (Boss Sans de Undertale), pois possui lógica própria de tempo de sobrevivência e vitória
+      if (this.level !== 10 && this.score >= this.level * this.pointsPerLevel) {
         this.openPhaseShop();
       }
     }
@@ -4171,6 +4215,11 @@ class Game {
       }
     }
 
+    // Trava de segurança de partículas para estabilizar FPS em sessões longas e bullet hell denso
+    if (this.particles.length > 250) {
+      this.particles.splice(0, this.particles.length - 250);
+    }
+
     if (this.isMultiplayer) {
       this.updateX1HUD();
     } else {
@@ -4486,9 +4535,10 @@ class Game {
     this.player.isBlueSoul = true;
     this.player.blueSoulTimer = 1.4;
 
-    const slamSpeed = 780;
+    const slamSpeed = 820;
     if (dir === 'DOWN') {
-      this.player.vy = slamSpeed;
+      this.player.y = Math.min(VIRTUAL_HEIGHT - 60, this.player.y + 25);
+      this.player.slamVy = slamSpeed;
       for (let k = 0; k < 25; k++) {
         this.particles.push(new Particle(this.player.x, this.player.y, '#0055ff', (Math.random() - 0.5) * 140, -100 - Math.random() * 200, 0.5, 3.5));
       }
@@ -4498,7 +4548,8 @@ class Game {
         isBone: true, color: '#ffffff', warningRgb: '0, 150, 255'
       });
     } else if (dir === 'UP') {
-      this.player.vy = -slamSpeed;
+      this.player.y = Math.max(60, this.player.y - 25);
+      this.player.slamVy = -slamSpeed;
       for (let k = 0; k < 25; k++) {
         this.particles.push(new Particle(this.player.x, this.player.y, '#0055ff', (Math.random() - 0.5) * 140, 100 + Math.random() * 200, 0.5, 3.5));
       }
@@ -4508,7 +4559,8 @@ class Game {
         isBone: true, color: '#ffffff', warningRgb: '0, 150, 255'
       });
     } else if (dir === 'LEFT') {
-      this.player.vx = -slamSpeed;
+      this.player.x = Math.max(60, this.player.x - 25);
+      this.player.slamVx = -slamSpeed;
       for (let k = 0; k < 25; k++) {
         this.particles.push(new Particle(this.player.x, this.player.y, '#0055ff', 100 + Math.random() * 200, (Math.random() - 0.5) * 140, 0.5, 3.5));
       }
@@ -4518,7 +4570,8 @@ class Game {
         isBone: true, color: '#ffffff', warningRgb: '0, 150, 255'
       });
     } else if (dir === 'RIGHT') {
-      this.player.vx = slamSpeed;
+      this.player.x = Math.min(VIRTUAL_WIDTH - 60, this.player.x + 25);
+      this.player.slamVx = slamSpeed;
       for (let k = 0; k < 25; k++) {
         this.particles.push(new Particle(this.player.x, this.player.y, '#0055ff', -100 - Math.random() * 200, (Math.random() - 0.5) * 140, 0.5, 3.5));
       }
@@ -4680,7 +4733,8 @@ class Game {
     this.lasers = [];
     sounds.playLevelUp();
     this.screenShake = 16;
-    this.showLevelBanner('🏆 VOCÊ DERROTOU O SANS! 🏆', 'Sobreviveu à rota mais difícil de Undertale! (+1000 🪙)', 4500);
+    this.sansDialogue = '💀 SANS: "droga... você venceu... nada mal, pivete..."';
+    this.showLevelBanner('🏆 VOCÊ DERROTOU O SANS! 🏆', 'Sobreviveu à rota mais difícil de Undertale! (+1000 🪙)', 4200);
 
     this.addCredits(1000);
 
@@ -4697,6 +4751,13 @@ class Game {
         this.spawnPickup();
       }, i * 250);
     }
+
+    // Após 4 segundos de celebração e orbes na arena, abre a tela de vitória oficial!
+    setTimeout(() => {
+      if (this.gameState === STATE.PLAYING && this.level === 10) {
+        this.triggerGameOver(true);
+      }
+    }, 4000);
   }
 
   drawSansBossHUD() {
