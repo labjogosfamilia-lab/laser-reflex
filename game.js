@@ -103,6 +103,10 @@ class SoundController {
 
   playLaserWarning() {
     if (!this.enabled || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    if (this.lastWarningTime && now - this.lastWarningTime < 0.04) return;
+    this.lastWarningTime = now;
+
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'triangle';
@@ -120,6 +124,10 @@ class SoundController {
 
   playLaserBlast() {
     if (!this.enabled || !this.ctx) return;
+    const now = this.ctx.currentTime;
+    if (this.lastBlastTime && now - this.lastBlastTime < 0.04) return;
+    this.lastBlastTime = now;
+
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sawtooth';
@@ -398,6 +406,9 @@ class SoundController {
   playGasterBlasterCharge() {
     if (!this.enabled || !this.ctx) return;
     const now = this.ctx.currentTime;
+    if (this.lastBlasterChargeTime && now - this.lastBlasterChargeTime < 0.08) return;
+    this.lastBlasterChargeTime = now;
+
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sawtooth';
@@ -414,6 +425,9 @@ class SoundController {
   playSansSlam() {
     if (!this.enabled || !this.ctx) return;
     const now = this.ctx.currentTime;
+    if (this.lastSlamSoundTime && now - this.lastSlamSoundTime < 0.12) return;
+    this.lastSlamSoundTime = now;
+
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = 'sawtooth';
@@ -699,10 +713,22 @@ class Player {
 
     // Limites da Arena (Bordas)
     const margin = this.radius + 6;
-    if (this.x < margin) this.x = margin;
-    if (this.x > VIRTUAL_WIDTH - margin) this.x = VIRTUAL_WIDTH - margin;
-    if (this.y < margin) this.y = margin;
-    if (this.y > VIRTUAL_HEIGHT - margin) this.y = VIRTUAL_HEIGHT - margin;
+    if (this.x < margin) {
+      this.x = margin;
+      if (this.slamVx < 0) this.slamVx = 0;
+    }
+    if (this.x > VIRTUAL_WIDTH - margin) {
+      this.x = VIRTUAL_WIDTH - margin;
+      if (this.slamVx > 0) this.slamVx = 0;
+    }
+    if (this.y < margin) {
+      this.y = margin;
+      if (this.slamVy < 0) this.slamVy = 0;
+    }
+    if (this.y > VIRTUAL_HEIGHT - margin) {
+      this.y = VIRTUAL_HEIGHT - margin;
+      if (this.slamVy > 0) this.slamVy = 0;
+    }
 
     // Rastro fantasma no Dash
     if (this.isDashing) {
@@ -966,6 +992,29 @@ class Laser {
     this.orbitRadius = options.orbitRadius || 0;
     this.orbitAngle = options.orbitAngle || 0;
     this.beamAngleOffset = options.beamAngleOffset !== undefined ? options.beamAngleOffset : 0;
+
+    // Inicialização segura de coordenadas para lasers com âncora ou órbita
+    if (this.centerAnchor && this.orbitRadius) {
+      this.x1 = this.centerAnchor.x + Math.cos(this.orbitAngle) * this.orbitRadius;
+      this.y1 = this.centerAnchor.y + Math.sin(this.orbitAngle) * this.orbitRadius;
+      const fireAngle = this.orbitAngle + (this.beamAngleOffset !== undefined ? this.beamAngleOffset : Math.PI);
+      this.x2 = this.x1 + Math.cos(fireAngle) * this.length;
+      this.y2 = this.y1 + Math.sin(fireAngle) * this.length;
+    } else if (this.centerAnchor) {
+      this.x1 = this.centerAnchor.x;
+      this.y1 = this.centerAnchor.y;
+      this.x2 = this.x1 + Math.cos(this.angle) * this.length;
+      this.y2 = this.y1 + Math.sin(this.angle) * this.length;
+    } else {
+      this.x1 = options.x1 !== undefined ? options.x1 : 0;
+      this.y1 = options.y1 !== undefined ? options.y1 : 0;
+      this.x2 = options.x2 !== undefined ? options.x2 : 0;
+      this.y2 = options.y2 !== undefined ? options.y2 : 0;
+    }
+
+    this.currentAngle = options.currentAngle !== undefined ? options.currentAngle : (Math.atan2(this.y2 - this.y1, this.x2 - this.x1) || 0);
+    this.lockedTargetX = options.x2 !== undefined ? options.x2 : this.x2;
+    this.lockedTargetY = options.y2 !== undefined ? options.y2 : this.y2;
 
     sounds.playLaserWarning();
   }
@@ -3312,6 +3361,18 @@ class Game {
     }
   }
 
+  showLevelBanner(title, subtitle, duration = 2500) {
+    if (this.domLevelBanner && this.domBannerTitle && this.domBannerSub) {
+      this.domBannerTitle.textContent = title;
+      this.domBannerSub.textContent = subtitle;
+      this.domLevelBanner.classList.remove('hidden');
+      if (this.bannerTimeout) clearTimeout(this.bannerTimeout);
+      this.bannerTimeout = setTimeout(() => {
+        if (this.domLevelBanner) this.domLevelBanner.classList.add('hidden');
+      }, duration);
+    }
+  }
+
   openPhaseShop() {
     this.gameState = STATE.PHASE_SHOP;
     this.keys = {};
@@ -3367,30 +3428,23 @@ class Game {
     this.updateHUD();
 
     // Exibe banner da nova fase
-    if (this.domLevelBanner && this.domBannerTitle && this.domBannerSub) {
-      this.domBannerTitle.textContent = `★ FASE ${this.level} ★`;
-      if (this.level === 2) {
-        this.domBannerSub.textContent = `SOBRECARGA ULTRAVIOLETA: Lasers Rastreadores (delay para esquivar)!`;
-      } else if (this.level === 3) {
-        this.domBannerSub.textContent = `HIPERDRIVE QUÂNTICO: Feixes Duplos e Velocidade Extrema!`;
-      } else if (this.level === 4) {
-        this.domBannerSub.textContent = `ZONA CRÍTICA: Reflexos no Limite Absoluto!`;
-      } else if (this.level === 5) {
-        this.domBannerSub.textContent = `⚡ TEMPESTADE CIBERNÉTICA: CHUVA DE LASERS POR 5 SEGUNDOS! ⚡`;
-      } else if (this.level === 10) {
-        this.domBannerTitle.textContent = `💀 FASE 10: SANS (UNDERTALE) 💀`;
-        this.domBannerSub.textContent = `VOCÊ VAI TER UM TEMPO RUIM! Sobreviva aos Gaster Blasters e ao Círculo Giratório!`;
-        sounds.playSansMegalovania();
-      } else {
-        this.domBannerSub.textContent = `SOBREVIVÊNCIA MÁXIMA: Nível de Ameaça Extremo!`;
-      }
-
-      this.domLevelBanner.classList.remove('hidden');
-      if (this.bannerTimeout) clearTimeout(this.bannerTimeout);
-      this.bannerTimeout = setTimeout(() => {
-        if (this.domLevelBanner) this.domLevelBanner.classList.add('hidden');
-      }, 2300);
+    let bannerTitle = `★ FASE ${this.level} ★`;
+    let bannerSub = `SOBREVIVÊNCIA MÁXIMA: Nível de Ameaça Extremo!`;
+    if (this.level === 2) {
+      bannerSub = `SOBRECARGA ULTRAVIOLETA: Lasers Rastreadores (delay para esquivar)!`;
+    } else if (this.level === 3) {
+      bannerSub = `HIPERDRIVE QUÂNTICO: Feixes Duplos e Velocidade Extrema!`;
+    } else if (this.level === 4) {
+      bannerSub = `ZONA CRÍTICA: Reflexos no Limite Absoluto!`;
+    } else if (this.level === 5) {
+      bannerSub = `⚡ TEMPESTADE CIBERNÉTICA: CHUVA DE LASERS POR 5 SEGUNDOS! ⚡`;
+    } else if (this.level === 10) {
+      bannerTitle = `💀 FASE 10: SANS (UNDERTALE) 💀`;
+      bannerSub = `VOCÊ VAI TER UM TEMPO RUIM! Sobreviva aos Gaster Blasters e ao Círculo Giratório!`;
+      sounds.playSansMegalovania();
     }
+
+    this.showLevelBanner(bannerTitle, bannerSub, 2300);
 
     if (this.level === 5) {
       this.phase5RainTriggered = false;
@@ -4506,6 +4560,9 @@ class Game {
     this.sansCircleTriggered = false;
     this.sansSpecialRingTriggered = false;
     this.sansVictoryTriggered = false;
+    this.sansPickup1Triggered = false;
+    this.sansPickup2Triggered = false;
+    this.sansPickup3Triggered = false;
     this.sansBoneTimer = 0;
     this.sansBlasterTimer = 0;
     this.sansGravityTimer = 0;
@@ -4568,8 +4625,17 @@ class Game {
     }
 
     // Spawna orbe de cura/escudo de emergência em momentos estratégicos
-    if ((Math.abs(t - 14.0) < dt || Math.abs(t - 28.0) < dt || Math.abs(t - 40.0) < dt) && this.pickups.length < 2) {
-      this.spawnPickup();
+    if (t >= 14.0 && !this.sansPickup1Triggered) {
+      this.sansPickup1Triggered = true;
+      if (this.pickups.length < 2) this.spawnPickup();
+    }
+    if (t >= 28.0 && !this.sansPickup2Triggered) {
+      this.sansPickup2Triggered = true;
+      if (this.pickups.length < 2) this.spawnPickup();
+    }
+    if (t >= 40.0 && !this.sansPickup3Triggered) {
+      this.sansPickup3Triggered = true;
+      if (this.pickups.length < 2) this.spawnPickup();
     }
 
     // 1. O PRIMEIRO GOLPE (0s - 7s): Abertura brutal e veloz
@@ -4983,8 +5049,12 @@ class Game {
     const dt = Math.min((time - this.lastTime) / 1000, 0.1);
     this.lastTime = time;
 
-    this.update(dt);
-    this.draw();
+    try {
+      this.update(dt);
+      this.draw();
+    } catch (err) {
+      console.error('Erro no loop do jogo:', err);
+    }
 
     requestAnimationFrame(this.gameLoop.bind(this));
   }
